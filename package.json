@@ -1,0 +1,53 @@
+{
+  "name": "cairn",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc",
+    "test": "vitest run --exclude \"tests/rls/**\"",
+    "test:watch": "vitest",
+    "test:rls": "vitest run tests/rls",
+    "db:push": "node scripts/db-push.mjs",
+    "db:types": "node scripts/db-types.mjs",
+    "seed": "node scripts/seed.mjs"
+  },
+  "dependencies": {
+    "@react-spring/three": "10.1.2",
+    "@react-three/drei": "10.7.8",
+    "@react-three/fiber": "9.7.0",
+    "@react-three/postprocessing": "3.1.1",
+    "@radix-ui/react-dialog": "1.1.23",
+    "@radix-ui/react-popover": "1.1.23",
+    "@radix-ui/react-select": "2.3.7",
+    "@supabase/supabase-js": "2.116.0",
+    "@tanstack/react-query": "5.102.8",
+    "lucide-react": "1.43.0",
+    "motion": "13.2.0",
+    "postprocessing": "6.39.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-router": "7.18.3",
+    "three": "0.185.1",
+    "zustand": "5.0.15"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "@vitejs/plugin-react": "6.1.1",
+    "dotenv": "17.4.2",
+    "jsdom": "30.0.1",
+    "supabase": "2.117.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3",
+    "vite": "8.2.2",
+    "vitest": "5.0.0"
+  }
+}
