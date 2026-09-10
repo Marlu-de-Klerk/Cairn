@@ -4,9 +4,9 @@
 
 **Goal:** The home screen becomes a real, persistent R3F archipelago — goals render as islands at stable, seeded positions read live from Supabase, the camera auto-orbits until touched, and clicking an island flies the camera to it with the URL (`/g/:id`) and back button in sync.
 
-**Architecture:** One `<Canvas>` mounts once in `App.tsx`, alongside the router, and stays mounted across `/` and `/g/:id` — per spec §8 ("one scene, one camera, two camera states") and §6.3 (the archipelago "stays rendered behind" the island view, no page transition). The router only changes the URL; `ArchipelagoScene` reads the current route via `useParams` and drives a hand-rolled camera rig between an auto-orbiting idle state and a react-spring-animated fly-to-island state. Islands read their position directly from the goal row's stored `island_x`/`island_z`/`island_rotation` — never recomputed client-side; the golden-angle spiral formula is a pure function used only at insert time (this plan's seed script now, the New Goal flow in M4 later). No Zustand store yet — nothing needs state shared across components beyond what the URL and local component state already carry.
+**Architecture:** One `<Canvas>` mounts once in `App.tsx`, alongside the router, and stays mounted across `/` and `/g/:id` — per spec §8 ("one scene, one camera, two camera states") and §6.3 (the archipelago "stays rendered behind" the island view, no page transition). The router only changes the URL; `ArchipelagoScene` reads the current route via `useParams` and drives a hand-rolled camera rig between an auto-orbiting idle state (stopped permanently by manual drag) and an eased fly-to-island state, keyed off wherever the camera actually is rather than a two-endpoint mixer (see Task 5's design note — an early draft using `@react-spring/three` for a binary progress value produced real teleport glitches on certain transitions; this plan's camera work is hand-rolled instead, `@react-spring/three` remains the right tool for M3's marker movement, a genuine two-fixed-point animation). Islands read their position directly from the goal row's stored `island_x`/`island_z`/`island_rotation` — never recomputed client-side; the golden-angle spiral formula is a pure function used only at insert time (this plan's seed script now, the New Goal flow in M4 later). No Zustand store yet — nothing needs state shared across components beyond what the URL and local component state already carry.
 
-**Tech Stack:** @react-three/fiber 9.7.0, @react-three/drei 10.7.8, @react-spring/three 10.1.2, three 0.185.1 (all already installed, M0). @supabase/supabase-js, @tanstack/react-query (already installed). No new dependencies.
+**Tech Stack:** @react-three/fiber 9.7.0, @react-three/drei 10.7.8, three 0.185.1 (all already installed, M0). @supabase/supabase-js, @tanstack/react-query (already installed). No new dependencies. (`@react-spring/three` is installed but not used by this plan — see Architecture note; it's the right tool for M3's marker movement instead.)
 
 **Spec:** `docs/superpowers/specs/2026-09-09-cairn-design.md` §6.1 (Home), §6.1's spiral formula, §8 (one-scene rule), §10 (seed script)
 
@@ -648,23 +648,29 @@ git commit -m "M2: placeholder island and water"
 
 **Interfaces:**
 - Consumes: `focusedGoal: Goal | null` (the goal matching the current `/g/:id`, if any — passed in by Task 6).
-- Produces: `<CameraRig focusedGoal={...} />`, a component with no visible output that drives the R3F camera every frame; also attaches the drag-to-stop-auto-rotate listener.
+- Produces: `<CameraRig focusedGoal={...} />`, a component with no visible output that drives the R3F camera every frame; also attaches manual drag-to-orbit and the permanent stop-auto-rotate-on-interaction behavior.
+
+**Design note:** this is a hand-rolled "chase a moving target" camera, not a two-endpoint spring mixer. An earlier draft used a single `progress: 0|1` react-spring value to mix between "orbit position" and "island approach position" — that shape cannot represent a 3-state transition graph (orbit / departing-island-A / arriving-at-island-B) and produced real teleport glitches: un-focusing mid-flight snapped instead of flying home, and switching directly between two islands snapped instead of flying between them (both because the mixer's two endpoints are fixed formulas, not "wherever the camera actually is right now"). The fix: every transition — home→island, island→home, island A→island B — captures the camera's actual current position the instant the focused goal's identity changes, and eases from there toward wherever it should currently be, so there is no discontinuity regardless of which transition fires. No spring library needed for this; the easing is a plain cubic ease-out over a tracked elapsed time.
 
 - [ ] **Step 1: Create `src/features/archipelago/CameraRig.tsx`**
 
 ```tsx
 import { useEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { useSpring } from '@react-spring/three'
 import { Vector3 } from 'three'
 import type { Goal } from './api'
 
 const ORBIT_RADIUS = 30
 const ORBIT_ELEVATION = (35 * Math.PI) / 180 // spec §6.1: "looking down at maybe 35°"
 const ORBIT_SPEED = 0.05 // radians/second while idle
+const DRAG_SENSITIVITY = 0.005 // radians per pixel of horizontal drag
 const ISLAND_APPROACH_DISTANCE = 8
 const ISLAND_APPROACH_ELEVATION = (40 * Math.PI) / 180
-const FLY_DURATION_MS = 1200 // spec §6.3
+const FLY_DURATION = 1.2 // seconds, spec §6.3
+
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3)
+}
 
 function orbitPosition(azimuth: number): Vector3 {
   return new Vector3(
@@ -674,7 +680,7 @@ function orbitPosition(azimuth: number): Vector3 {
   )
 }
 
-function islandApproachPosition(goal: Goal): Vector3 {
+function islandApproachPosition(goal: { islandX: number; islandZ: number }): Vector3 {
   return new Vector3(
     goal.islandX + ISLAND_APPROACH_DISTANCE * Math.cos(ISLAND_APPROACH_ELEVATION),
     ISLAND_APPROACH_DISTANCE * Math.sin(ISLAND_APPROACH_ELEVATION),
@@ -690,48 +696,82 @@ export function CameraRig({ focusedGoal }: CameraRigProps) {
   const { camera, gl } = useThree()
   const azimuth = useRef(0)
   const hasInteracted = useRef(false)
+  const isDragging = useRef(false)
+  const lastPointerX = useRef(0)
+  const lastFocusedGoalId = useRef<string | null>(null)
+  const transitionStart = useRef<Vector3 | null>(null)
+  const transitionElapsed = useRef(0)
 
-  const [{ progress }, api] = useSpring(() => ({ progress: 0, config: { duration: FLY_DURATION_MS } }))
-
-  // A drag anywhere on the canvas permanently stops auto-rotation (spec
-  // §6.1: "stops rotating the moment I touch it and doesn't resume").
+  // Manual drag-to-orbit, plus the permanent auto-rotate stop (spec §6.1:
+  // "stops rotating the moment I touch it and doesn't resume"). Attached to
+  // `window` for move/up so a drag that leaves the canvas bounds mid-gesture
+  // still tracks correctly.
   useEffect(() => {
     const element = gl.domElement
-    const handlePointerDown = () => {
+
+    const handlePointerDown = (event: PointerEvent) => {
       hasInteracted.current = true
+      isDragging.current = true
+      lastPointerX.current = event.clientX
     }
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!isDragging.current) return
+      const deltaX = event.clientX - lastPointerX.current
+      azimuth.current -= deltaX * DRAG_SENSITIVITY
+      lastPointerX.current = event.clientX
+    }
+    const handlePointerUp = () => {
+      isDragging.current = false
+    }
+
     element.addEventListener('pointerdown', handlePointerDown)
-    return () => element.removeEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+    return () => {
+      element.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+    }
   }, [gl])
 
-  // Side effect (starting the spring) belongs in an effect, not directly in
-  // the render body — this component renders under StrictMode, which
-  // double-invokes render, and a bare render-time call here would risk
-  // double-starting the animation.
-  useEffect(() => {
-    api.start({ progress: focusedGoal ? 1 : 0 })
-  }, [focusedGoal?.id, api])
-
   useFrame((_, delta) => {
-    if (!hasInteracted.current && !focusedGoal) {
+    const focusedGoalId = focusedGoal?.id ?? null
+
+    // A transition begins the instant the focused goal's identity changes —
+    // capture wherever the camera ACTUALLY is right now as the flight's
+    // start point, whichever direction this transition runs.
+    if (focusedGoalId !== lastFocusedGoalId.current) {
+      lastFocusedGoalId.current = focusedGoalId
+      transitionStart.current = camera.position.clone()
+      transitionElapsed.current = 0
+    }
+
+    const isTransitioning = transitionStart.current !== null
+
+    // Auto-rotate only ever runs before the first interaction, ever — once
+    // `hasInteracted` flips true (on the very first pointerdown, at the same
+    // moment `isDragging` starts) it never resumes, matching spec exactly.
+    if (!isTransitioning && !focusedGoal && !hasInteracted.current) {
       azimuth.current += delta * ORBIT_SPEED
     }
 
-    const orbit = orbitPosition(azimuth.current)
-    const t = progress.get()
+    const desiredPosition = focusedGoal ? islandApproachPosition(focusedGoal) : orbitPosition(azimuth.current)
+    const desiredLookAt = focusedGoal ? new Vector3(focusedGoal.islandX, 0, focusedGoal.islandZ) : new Vector3(0, 0, 0)
 
-    if (t <= 0) {
-      camera.position.copy(orbit)
-      camera.lookAt(0, 0, 0)
+    if (isTransitioning) {
+      transitionElapsed.current += delta
+      const rawT = Math.min(1, transitionElapsed.current / FLY_DURATION)
+      const t = easeOutCubic(rawT)
+      camera.position.lerpVectors(transitionStart.current!, desiredPosition, t)
+      camera.lookAt(desiredLookAt)
+      if (rawT >= 1) {
+        transitionStart.current = null
+      }
       return
     }
 
-    const target = focusedGoal ?? { islandX: 0, islandZ: 0 }
-    const approach = islandApproachPosition(target as Goal)
-    camera.position.lerpVectors(orbit, approach, t)
-    const lookAtX = 0 + (target.islandX - 0) * t
-    const lookAtZ = 0 + (target.islandZ - 0) * t
-    camera.lookAt(lookAtX, 0, lookAtZ)
+    camera.position.copy(desiredPosition)
+    camera.lookAt(desiredLookAt)
   })
 
   return null
