@@ -7,7 +7,11 @@ const ORBIT_RADIUS = 30
 const ORBIT_ELEVATION = (35 * Math.PI) / 180 // spec §6.1: "looking down at maybe 35°"
 const ORBIT_SPEED = 0.05 // radians/second while idle
 const DRAG_SENSITIVITY = 0.005 // radians per pixel of horizontal drag
-const ISLAND_APPROACH_DISTANCE = 8
+// Old ratio was distance 8 against the pre-M4 cone's footprint radius 2 (4x).
+// Applying the same 4x to the real island footprint (radius about 1.97 post
+// Island.tsx's ISLAND_SCALE — see that file's comment) keeps the detail-view
+// framing proportionate to the actual, much smaller mesh.
+const ISLAND_APPROACH_DISTANCE = 7.88
 const ISLAND_APPROACH_ELEVATION = (40 * Math.PI) / 180
 const FLY_DURATION = 1.2 // seconds, spec §6.3
 const DRAG_CLICK_THRESHOLD = 5 // px of travel past which a gesture is a drag, not a click
@@ -34,11 +38,19 @@ function islandApproachPosition(goal: { islandX: number; islandZ: number }): Vec
 
 interface CameraRigProps {
   focusedGoal: Goal | null
+  // The angle (radians, atan2(islandZ, islandX)) toward the user's own
+  // archipelago, so the idle orbit starts facing their islands instead of a
+  // fixed world-space 0 that has no relationship to where a golden-angle
+  // spiral placed them — without this, ORBIT_SPEED's deliberately slow
+  // "auto-rotating slowly" (spec §6.1) can leave a viewer staring at empty
+  // water for 20+ seconds before anything rotates into frame.
+  initialAzimuth?: number
 }
 
-export function CameraRig({ focusedGoal }: CameraRigProps) {
+export function CameraRig({ focusedGoal, initialAzimuth }: CameraRigProps) {
   const { camera, gl } = useThree()
   const azimuth = useRef(0)
+  const azimuthInitialized = useRef(false)
   const hasInteracted = useRef(false)
   const isDragging = useRef(false)
   const lastPointerX = useRef(0)
@@ -109,6 +121,17 @@ export function CameraRig({ focusedGoal }: CameraRigProps) {
       window.removeEventListener('click', handleClickCapture, true)
     }
   }, [gl])
+
+  // `initialAzimuth` arrives once goals have loaded (it's undefined on the
+  // very first render, before the archipelago query resolves) — apply it
+  // exactly once, and never once the viewer has already started rotating
+  // the camera themselves (that's their orbit position now, not a default
+  // to override).
+  useEffect(() => {
+    if (initialAzimuth === undefined || azimuthInitialized.current || hasInteracted.current) return
+    azimuth.current = initialAzimuth
+    azimuthInitialized.current = true
+  }, [initialAzimuth])
 
   useFrame((_, delta) => {
     const focusedGoalId = focusedGoal?.id ?? null

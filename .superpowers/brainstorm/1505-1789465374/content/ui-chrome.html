@@ -1,0 +1,47 @@
+<h2>Light/warm 2D UI, and which type pairing?</h2>
+<p class="subtitle">Same Soft Lagoon palette, applied to the actual chrome: header bar, an island label, the roadmap panel's "Mark done" button. Rounded corners throughout, replacing the current dark "ink" theme entirely. Pick a type pairing — everything else about the copy/layout stays as already built.</p>
+
+<div class="split">
+
+  <div class="mockup">
+    <div class="mockup-header">Option A — Rounded, friendly sans (Baloo 2 / Quicksand headings + Inter body)</div>
+    <div class="mockup-body" style="background:#EAF6F6;padding:16px;border-radius:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;background:#FFFFFFcc;backdrop-filter:blur(6px);border-radius:16px;padding:10px 16px;box-shadow:0 2px 8px #0001">
+        <span style="font-family:'Baloo 2',cursive;font-weight:700;font-size:20px;color:#3A7D77">Cairn</span>
+        <button style="background:#F2C879;border:none;border-radius:999px;padding:8px 16px;font-family:Inter,sans-serif;font-weight:600;color:#5C3D1A">New goal</button>
+      </div>
+      <div style="margin-top:14px;background:#FFFFFFcc;border-radius:14px;padding:12px 16px;box-shadow:0 2px 8px #0001">
+        <div style="font-family:'Baloo 2',cursive;font-weight:700;color:#3A7D77;font-size:16px">Run 10K</div>
+        <div style="font-family:Inter,sans-serif;font-size:13px;color:#6B8A87;margin-top:2px">5 km / 10 km</div>
+        <button style="margin-top:10px;background:#F2C879;border:none;border-radius:999px;padding:8px 14px;font-family:Inter,sans-serif;font-weight:600;color:#5C3D1A;width:100%">Mark 8 km done</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">Option B — Keep Fraunces serif headings, warm-recolored (Fraunces + Inter body)</div>
+    <div class="mockup-body" style="background:#EAF6F6;padding:16px;border-radius:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;background:#FFFFFFcc;backdrop-filter:blur(6px);border-radius:16px;padding:10px 16px;box-shadow:0 2px 8px #0001">
+        <span style="font-family:Georgia,serif;font-weight:600;font-size:20px;color:#3A7D77">Cairn</span>
+        <button style="background:#F2C879;border:none;border-radius:999px;padding:8px 16px;font-family:Inter,sans-serif;font-weight:600;color:#5C3D1A">New goal</button>
+      </div>
+      <div style="margin-top:14px;background:#FFFFFFcc;border-radius:14px;padding:12px 16px;box-shadow:0 2px 8px #0001">
+        <div style="font-family:Georgia,serif;font-weight:600;color:#3A7D77;font-size:16px">Run 10K</div>
+        <div style="font-family:Inter,sans-serif;font-size:13px;color:#6B8A87;margin-top:2px">5 km / 10 km</div>
+        <button style="margin-top:10px;background:#F2C879;border:none;border-radius:999px;padding:8px 14px;font-family:Inter,sans-serif;font-weight:600;color:#5C3D1A;width:100%">Mark 8 km done</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="options" style="margin-top:16px">
+  <div class="option" data-choice="rounded-sans" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content"><h3>Rounded sans (Baloo 2 / Quicksand)</h3><p>Matches the "cute, cozy" mood most directly</p></div>
+  </div>
+  <div class="option" data-choice="keep-fraunces" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content"><h3>Keep Fraunces serif</h3><p>A little more storybook/editorial, less generic-cute</p></div>
+  </div>
+</div>

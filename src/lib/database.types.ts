@@ -242,6 +242,47 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_goal_with_milestones: {
+        Args: {
+          p_biome: string
+          p_description: string
+          p_is_public: boolean
+          p_island_rotation: number
+          p_island_x: number
+          p_island_z: number
+          p_kind: string
+          p_milestones: Json
+          p_start_value: number
+          p_target_value: number
+          p_title: string
+          p_unit: string
+        }
+        Returns: {
+          biome: string
+          completed_at: string | null
+          created_at: string
+          current_value: number
+          description: string | null
+          id: string
+          is_public: boolean
+          island_rotation: number
+          island_x: number
+          island_z: number
+          kind: string
+          start_value: number
+          status: string
+          target_value: number | null
+          title: string
+          unit: string | null
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "goals"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       entry_readable: { Args: { p_entry_id: string }; Returns: boolean }
       goal_publicly_readable: { Args: { p_goal_id: string }; Returns: boolean }
       owns_goal: { Args: { p_goal_id: string }; Returns: boolean }

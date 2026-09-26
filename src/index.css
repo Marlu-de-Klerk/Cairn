@@ -1,1 +1,36 @@
 @import "tailwindcss";
+@import "@fontsource-variable/fraunces";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+
+@theme {
+  --color-ink: #12181f;
+  --color-stone: #232b34;
+  --color-stone-light: #313c47;
+  --color-mist: #e9e6de;
+  --color-lantern: #e8a24c;
+  --color-tide: #4fa8a0;
+  /* Reuses the jungle biome's accent hex (see BIOME_PALETTES.jungle.accent
+     in src/lib/theme.ts) — it already reads as "alert" against the cool
+     base palette, so this isn't a new, undocumented seventh hex. */
+  --color-accent-error: #e2483f;
+
+  --font-display: "Fraunces Variable", Georgia, serif;
+  --font-body: "Inter", system-ui, sans-serif;
+}
+
+body {
+  background: var(--color-ink);
+  color: var(--color-mist);
+  font-family: var(--font-body);
+}
+
+/* Visible keyboard focus everywhere — spec §7 quality floor. Tailwind's
+   default focus ring is blue and clashes with the palette; this replaces
+   it globally rather than per-component. */
+:focus-visible {
+  outline: 2px solid var(--color-lantern);
+  outline-offset: 2px;
+}

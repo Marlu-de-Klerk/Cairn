@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { useMatch } from 'react-router'
+import { useMatch, useNavigate } from 'react-router'
 import { useGoals } from './api'
 import { useSession } from '../auth/useSession'
 import { supabase } from '../../lib/supabase'
 import { EmptyArchipelago } from './EmptyArchipelago'
+import { NewGoalSheet } from './NewGoalSheet'
 import { RoadmapPanel } from '../roadmap/RoadmapPanel'
 
 interface HomeOverlayProps {
@@ -17,6 +18,8 @@ export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverla
   const focusedGoalId = useMatch('/g/:id')?.params.id
   const focusedGoal = goals?.find((g) => g.id === focusedGoalId) ?? null
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false)
+  const [newGoalOpen, setNewGoalOpen] = useState(false)
+  const navigate = useNavigate()
 
   const activeCount = goals?.filter((g) => g.status === 'active').length ?? 0
   const completedCount = goals?.filter((g) => g.status === 'completed').length ?? 0
@@ -25,15 +28,15 @@ export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverla
 
   return (
     <div className="pointer-events-none relative flex h-full flex-col">
-      <header className="pointer-events-auto flex items-center justify-between p-4">
-        <span className="text-sm font-semibold text-slate-100">Cairn</span>
+      <header className="pointer-events-auto flex items-center justify-between bg-stone/80 p-4 backdrop-blur-sm">
+        <span className="font-display text-lg text-mist">Cairn</span>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 font-body">
           {completedCount > 0 ? (
             <button
               type="button"
               onClick={onToggleShowCompleted}
-              className="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-100"
+              className="rounded-md border border-stone-light px-3 py-1.5 text-xs text-mist"
             >
               {showCompleted ? 'Hide completed' : 'Show completed'}
             </button>
@@ -41,9 +44,8 @@ export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverla
 
           <button
             type="button"
-            disabled
-            title="Coming soon"
-            className="cursor-not-allowed rounded-md bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-950 opacity-50"
+            onClick={() => setNewGoalOpen(true)}
+            className="rounded-md bg-lantern px-3 py-1.5 text-xs font-medium text-ink"
           >
             New goal
           </button>
@@ -52,7 +54,7 @@ export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverla
             type="button"
             disabled
             title="Coming soon"
-            className="cursor-not-allowed rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-100 opacity-50"
+            className="cursor-not-allowed rounded-md border border-stone-light px-3 py-1.5 text-xs text-mist opacity-50"
           >
             Explore
           </button>
@@ -61,17 +63,17 @@ export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverla
             <button
               type="button"
               onClick={() => setAvatarMenuOpen((value) => !value)}
-              className="rounded-full border border-slate-700 px-3 py-1.5 text-xs text-slate-100"
+              className="rounded-full border border-stone-light px-3 py-1.5 text-xs text-mist"
             >
               {session?.user.email?.[0]?.toUpperCase() ?? '?'}
             </button>
             {avatarMenuOpen ? (
-              <div className="absolute right-0 mt-2 w-48 rounded-md border border-slate-700 bg-slate-900 p-2 text-xs text-slate-100 shadow-lg">
-                <p className="truncate px-2 py-1 text-slate-400">{session?.user.email}</p>
+              <div className="absolute right-0 mt-2 w-48 rounded-md border border-stone-light bg-stone p-2 text-xs text-mist shadow-lg">
+                <p className="truncate px-2 py-1 text-mist/60">{session?.user.email}</p>
                 <button
                   type="button"
                   onClick={() => supabase.auth.signOut()}
-                  className="w-full rounded px-2 py-1 text-left hover:bg-slate-800"
+                  className="w-full rounded px-2 py-1 text-left hover:bg-stone-light"
                 >
                   Sign out
                 </button>
@@ -81,10 +83,10 @@ export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverla
         </div>
       </header>
 
-      <div className="pointer-events-none relative flex-1">
+      <div className="pointer-events-none relative flex-1 font-body">
         {showError ? (
           <div className="pointer-events-none flex h-full items-center justify-center">
-            <div className="pointer-events-auto max-w-xs rounded-md border border-slate-700 bg-slate-950/80 p-4 text-center text-sm text-slate-100">
+            <div className="pointer-events-auto max-w-xs rounded-md border border-stone-light bg-stone/80 p-4 text-center text-sm text-mist backdrop-blur-sm">
               <p>Couldn't load your archipelago. Try refreshing.</p>
             </div>
           </div>
@@ -93,6 +95,12 @@ export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverla
         ) : null}
         {focusedGoal ? <RoadmapPanel key={focusedGoal.id} goal={focusedGoal} /> : null}
       </div>
+
+      <NewGoalSheet
+        open={newGoalOpen}
+        onOpenChange={setNewGoalOpen}
+        onCreated={(goal) => navigate(`/g/${goal.id}`)}
+      />
     </div>
   )
 }

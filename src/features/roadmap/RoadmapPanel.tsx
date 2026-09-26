@@ -41,9 +41,9 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
 
   if (milestonesError || entriesError) {
     return (
-      <div className="pointer-events-auto absolute bottom-4 right-4 w-72 rounded-md border border-slate-700 bg-slate-950/90 p-3 text-sm text-slate-100">
-        <p className="font-medium">{goal.title}</p>
-        <p className="mt-1 text-xs text-slate-400">Couldn't load this goal's roadmap. Try refreshing.</p>
+      <div className="pointer-events-auto absolute bottom-4 right-4 w-72 rounded-md border border-stone-light bg-stone/90 p-3 text-sm text-mist backdrop-blur-sm">
+        <p className="font-display text-base">{goal.title}</p>
+        <p className="mt-1 font-body text-xs text-mist/60">Couldn't load this goal's roadmap. Try refreshing.</p>
       </div>
     )
   }
@@ -100,27 +100,27 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
         : 'Complete'
 
   return (
-    <div className="pointer-events-auto absolute bottom-4 right-4 flex w-72 flex-col gap-2">
+    <div className="pointer-events-auto absolute bottom-4 right-4 flex w-72 flex-col gap-2 font-body">
       {celebrating ? (
-        <div className="rounded-md border border-amber-400 bg-amber-950/90 p-3 text-center text-sm text-amber-100">
+        <div className="rounded-md border border-lantern bg-lantern/20 p-3 text-center text-sm font-medium text-lantern">
           🎉 {goal.title} complete!
         </div>
       ) : null}
 
-      <div className="rounded-md border border-slate-700 bg-slate-950/90 p-3 text-sm text-slate-100">
-        <p className="font-medium">{goal.title}</p>
+      <div className="rounded-md border border-stone-light bg-stone/90 p-3 text-sm text-mist backdrop-blur-sm">
+        <p className="font-display text-base">{goal.title}</p>
 
         {step.kind !== 'done' ? (
           <button
             type="button"
             onClick={handleMarkDone}
             disabled={markMilestoneDone.isPending || completeGoal.isPending}
-            className="mt-2 w-full rounded-md bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-950 disabled:opacity-50"
+            className="mt-2 w-full rounded-md bg-lantern px-3 py-1.5 text-xs font-medium text-ink disabled:opacity-50"
           >
             {markDoneLabel}
           </button>
         ) : (
-          <p className="mt-2 text-xs text-amber-300">Complete</p>
+          <p className="mt-2 text-xs font-medium text-lantern">Complete</p>
         )}
 
         {updateFormOpen ? (
@@ -129,7 +129,7 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
               value={updateTitle}
               onChange={(event) => setUpdateTitle(event.target.value)}
               placeholder="What happened?"
-              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100"
+              className="rounded border border-stone-light bg-ink px-2 py-1 text-xs text-mist"
             />
             {goal.kind === 'numeric' ? (
               <input
@@ -138,37 +138,37 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
                 placeholder={`Value (${goal.unit ?? 'optional'})`}
                 type="number"
                 step="any"
-                className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100"
+                className="rounded border border-stone-light bg-ink px-2 py-1 text-xs text-mist"
               />
             ) : null}
             <textarea
               value={updateNote}
               onChange={(event) => setUpdateNote(event.target.value)}
               placeholder="Note (optional)"
-              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100"
+              className="rounded border border-stone-light bg-ink px-2 py-1 text-xs text-mist"
               rows={2}
             />
-            <label className="flex items-center gap-1.5 text-xs text-slate-400">
+            <label className="flex items-center gap-1.5 text-xs text-mist/60">
               Date
               <input
                 value={updateDate}
                 onChange={(event) => setUpdateDate(event.target.value)}
                 type="date"
-                className="flex-1 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100"
+                className="flex-1 rounded border border-stone-light bg-ink px-2 py-1 text-xs text-mist"
               />
             </label>
             <div className="flex gap-1.5">
               <button
                 type="submit"
                 disabled={addProgressEntry.isPending || !updateTitle.trim()}
-                className="flex-1 rounded-md bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-950 disabled:opacity-50"
+                className="flex-1 rounded-md bg-mist px-3 py-1.5 text-xs font-medium text-ink disabled:opacity-50"
               >
                 Save update
               </button>
               <button
                 type="button"
                 onClick={() => setUpdateFormOpen(false)}
-                className="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-100"
+                className="rounded-md border border-stone-light px-3 py-1.5 text-xs text-mist"
               >
                 Cancel
               </button>
@@ -178,16 +178,16 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
           <button
             type="button"
             onClick={() => setUpdateFormOpen(true)}
-            className="mt-1.5 w-full rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-100"
+            className="mt-1.5 w-full rounded-md border border-stone-light px-3 py-1.5 text-xs text-mist"
           >
             Add update
           </button>
         )}
 
-        {errorMessage ? <p className="mt-1.5 text-xs text-red-400">{errorMessage}</p> : null}
+        {errorMessage ? <p className="mt-1.5 text-xs text-accent-error">{errorMessage}</p> : null}
       </div>
 
-      <div className="rounded-md border border-slate-700 bg-slate-950/90 text-sm text-slate-100">
+      <div className="rounded-md border border-stone-light bg-stone/90 text-sm text-mist backdrop-blur-sm">
         <button
           type="button"
           onClick={() => setJourneyOpen((value) => !value)}
@@ -196,15 +196,15 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
           {journeyOpen ? 'Hide journey' : 'Show journey'} ({entries.length})
         </button>
         {journeyOpen ? (
-          <ul className="max-h-48 overflow-y-auto border-t border-slate-800 px-3 py-2 text-xs">
+          <ul className="max-h-48 overflow-y-auto border-t border-stone-light px-3 py-2 text-xs">
             {entries.map((entry) => (
-              <li key={entry.id} className="border-b border-slate-800/60 py-1.5 last:border-0">
-                <p className="text-slate-100">{entry.title}</p>
-                <p className="text-slate-400">
+              <li key={entry.id} className="border-b border-stone-light/60 py-1.5 last:border-0">
+                <p className="font-display text-sm">{entry.title}</p>
+                <p className="text-mist/60">
                   {entry.occurredAt}
                   {entry.value !== null ? ` — ${entry.value}${goal.unit ? ` ${goal.unit}` : ''}` : ''}
                 </p>
-                {entry.note ? <p className="mt-0.5 text-slate-500">{entry.note}</p> : null}
+                {entry.note ? <p className="mt-0.5 text-mist/40">{entry.note}</p> : null}
               </li>
             ))}
           </ul>

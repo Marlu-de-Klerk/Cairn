@@ -28,6 +28,11 @@ export function ArchipelagoScene({ showCompleted }: ArchipelagoSceneProps) {
   const visibleGoals =
     focusedGoal && !filteredGoals.includes(focusedGoal) ? [...filteredGoals, focusedGoal] : filteredGoals
 
+  // Face the idle orbit toward the user's own islands from the start —
+  // otherwise a fixed default azimuth has no relationship to where the
+  // golden-angle spiral actually placed them (see CameraRig's own comment).
+  const initialAzimuth = visibleGoals.length > 0 ? Math.atan2(visibleGoals[0].islandZ, visibleGoals[0].islandX) : undefined
+
   return (
     <div className="fixed inset-0 -z-10">
       <Canvas camera={{ fov: 50 }}>
@@ -47,7 +52,7 @@ export function ArchipelagoScene({ showCompleted }: ArchipelagoSceneProps) {
             <RoadmapTrail key={focusedGoal.id} goal={focusedGoal} />
           </group>
         ) : null}
-        <CameraRig focusedGoal={focusedGoal} />
+        <CameraRig focusedGoal={focusedGoal} initialAzimuth={initialAzimuth} />
       </Canvas>
     </div>
   )

@@ -1,4 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { islandPosition } from '../../lib/archipelago'
+import type { Database } from '../../lib/database.types'
+import type { MilestoneInput } from '../../lib/newGoalValidation'
 import { supabase } from '../../lib/supabase'
 import { useSession } from '../auth/useSession'
 
@@ -77,6 +80,109 @@ export function useGoals() {
 
       if (error) throw error
       return data.map(toGoal)
+    },
+  })
+}
+
+export interface Profile {
+  id: string
+  archipelagoSeed: number
+}
+
+/**
+ * The signed-in user's own profile row, used at goal-creation time to
+ * derive the next island's spiral position (spec §6.1) — see
+ * src/lib/archipelago.ts.
+ */
+export function useProfile() {
+  const { session } = useSession()
+
+  return useQuery({
+    queryKey: ['profile', session?.user.id],
+    enabled: !!session,
+    queryFn: async (): Promise<Profile> => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, archipelago_seed')
+        .eq('id', session!.user.id)
+        .single()
+      if (error) throw error
+      return { id: data.id, archipelagoSeed: data.archipelago_seed }
+    },
+  })
+}
+
+export interface CreateGoalInput {
+  title: string
+  description: string | null
+  biome: Goal['biome']
+  kind: Goal['kind']
+  unit: string | null
+  startValue: number
+  targetValue: number | null
+  isPublic: boolean
+  milestones: MilestoneInput[]
+}
+
+/**
+ * Creates a goal, its milestones, and its island position atomically via
+ * the create_goal_with_milestones RPC (spec §6.2) — see
+ * supabase/migrations/0007_create_goal_with_milestones.sql.
+ */
+export function useCreateGoal() {
+  const { session } = useSession()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (input: CreateGoalInput): Promise<Goal> => {
+      if (!session) throw new Error('Not signed in.')
+
+      // Existing goal count determines this goal's spiral index — see
+      // src/lib/archipelago.ts. Read via the already-cached goals query
+      // rather than a fresh count query, so this never races a concurrent
+      // read differently than what the user is currently looking at.
+      const existingGoals = queryClient.getQueryData<Goal[]>(['goals', session.user.id]) ?? []
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('archipelago_seed')
+        .eq('id', session.user.id)
+        .single()
+      if (profileError) throw profileError
+
+      const position = islandPosition(existingGoals.length, profile.archipelago_seed)
+
+      // The generated RPC Args type has no way to express Postgres function
+      // parameter nullability (pg_proc carries no NOT NULL for args), so it
+      // types p_description/p_unit/p_target_value as non-null even though
+      // the migration accepts and stores NULL for each. The rpc() argument
+      // type is asserted here, not widened, so every other field (names,
+      // non-nullable types) still gets full structural checking above.
+      type CreateGoalRpcArgs = Database['public']['Functions']['create_goal_with_milestones']['Args']
+      const rpcArgs: Omit<CreateGoalRpcArgs, 'p_description' | 'p_unit' | 'p_target_value'> & {
+        p_description: string | null
+        p_unit: string | null
+        p_target_value: number | null
+      } = {
+        p_title: input.title,
+        p_description: input.description,
+        p_biome: input.biome,
+        p_kind: input.kind,
+        p_unit: input.unit,
+        p_start_value: input.startValue,
+        p_target_value: input.targetValue,
+        p_island_x: position.x,
+        p_island_z: position.z,
+        p_island_rotation: position.rotation,
+        p_is_public: input.isPublic,
+        p_milestones: input.milestones.map((m) => ({ title: m.title, targetValue: m.targetValue })),
+      }
+
+      const { data, error } = await supabase.rpc('create_goal_with_milestones', rpcArgs as CreateGoalRpcArgs)
+      if (error) throw error
+      return toGoal(data)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['goals'] })
     },
   })
 }

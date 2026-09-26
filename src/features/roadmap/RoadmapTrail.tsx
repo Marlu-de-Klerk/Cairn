@@ -6,13 +6,25 @@ import { CatmullRomCurve3, Vector3 } from 'three'
 import type { Mesh } from 'three'
 import { entrySide, entryTs, milestoneTs, progressT } from '../../lib/trail'
 import type { TrailGoal, TrailMilestone } from '../../lib/trail'
+import { BASE_TOKENS, getBiomePalette } from '../../lib/theme'
 import { buildTrailCurve, perpendicularOffset, positionAt } from './curve'
 import { useMilestones, useProgressEntries } from './api'
 import type { ProgressEntry } from './api'
 import type { Goal } from '../archipelago/api'
+import { TrailMarker } from './models/TrailMarker'
 
-const ISLAND_BASE_RADIUS = 2 // must match Island.tsx's coneGeometry args[0]
-const ISLAND_HEIGHT = 1.5 // must match Island.tsx's coneGeometry args[1]
+// This trail renders as a sibling of Island.tsx's own `<group ref={meshRef}
+// scale={ISLAND_SCALE}>` (same position/rotation, one level out — see
+// ArchipelagoScene.tsx), so these are WORLD-scale numbers: the real,
+// post-ISLAND_SCALE footprint of the five flat-platform biomes (4.4 * 0.447
+// half-width is about 1.97, 4.4 * 0.083 height is about 0.365 - see Island.tsx's
+// ISLAND_SCALE comment for the derivation). Volcano's own taller silhouette
+// (about 3x its siblings' height, per VolcanoLandmass.tsx) isn't given its own
+// height here - its trail apex sits a bit below its actual peak, an accepted,
+// minor trade-off rather than plumbing a per-biome height through this shared
+// curve builder for one biome's cosmetic difference.
+const ISLAND_BASE_RADIUS = 1.97
+const ISLAND_HEIGHT = 0.365
 const CURVE_SAMPLE_COUNT = 100
 const ENTRY_OFFSET_DISTANCE = 0.25
 const NODE_RADIUS = 0.12
@@ -108,19 +120,19 @@ function EntryMarker({
         }}
       >
         <sphereGeometry args={[0.06, 8, 8]} />
-        <meshStandardMaterial color="#e2e8f0" />
+        <meshStandardMaterial color={BASE_TOKENS.mist} />
       </mesh>
       {open ? (
         <Html position={[0, 0.2, 0]} center occlude distanceFactor={8}>
-          <div className="w-40 rounded-md border border-slate-700 bg-slate-900 p-2 text-xs text-slate-100 shadow-lg">
-            <p className="font-medium">{entry.title}</p>
+          <div className="w-40 rounded-md border border-stone-light bg-stone/90 p-2 text-xs font-body text-mist shadow-lg backdrop-blur-sm">
+            <p className="font-display font-medium">{entry.title}</p>
             {entry.value !== null ? (
-              <p className="mt-1 text-slate-400">
+              <p className="mt-1 text-mist/60">
                 {entry.value}
                 {unit ? ` ${unit}` : ''}
               </p>
             ) : null}
-            {entry.note ? <p className="mt-1 text-slate-500">{entry.note}</p> : null}
+            {entry.note ? <p className="mt-1 text-mist/40">{entry.note}</p> : null}
           </div>
         </Html>
       ) : null}
@@ -158,6 +170,14 @@ function seedFromId(id: string): number {
   return (hash / 1000) * Math.PI * 2
 }
 
+// Palette colors are three.js hex numbers (see lib/theme.ts); the milestone/tube
+// materials below are plain string-typed color props (matching the other literal
+// color strings already on this file), so the biome's hex numbers get converted
+// once here rather than mixing number/string color props across the component.
+function hexToCssColor(hex: number): string {
+  return `#${hex.toString(16).padStart(6, '0')}`
+}
+
 /** Builds a sub-curve from a slice of the parent curve's sampled points —
  * used to render the completed and remaining tube segments separately. At
  * least 2 points are required for a valid CatmullRomCurve3; a shorter slice
@@ -186,6 +206,13 @@ export function RoadmapTrail({ goal }: RoadmapTrailProps) {
     () => buildTrailCurve(ISLAND_BASE_RADIUS, ISLAND_HEIGHT, seedFromId(goal.id)),
     [goal.id],
   )
+
+  // Spec §7: each biome supplies its own trail material — the completed/remaining
+  // tube and the "next milestone" pulse all read from the goal's own biome palette
+  // rather than a fixed color used regardless of biome.
+  const biomePalette = getBiomePalette(goal.biome)
+  const trailColor = hexToCssColor(biomePalette.trail)
+  const trailAccentColor = hexToCssColor(biomePalette.accent)
 
   const sortedMilestones = useMemo(() => (milestones ? toTrailMilestones(milestones) : []), [milestones])
   const trailGoal = useMemo(() => toTrailGoal(goal), [goal])
@@ -256,11 +283,11 @@ export function RoadmapTrail({ goal }: RoadmapTrailProps) {
     <>
       <mesh>
         <tubeGeometry args={[completedCurve, 32, 0.06, 8, false]} />
-        <meshStandardMaterial color="#f5d76e" />
+        <meshStandardMaterial color={trailColor} />
       </mesh>
       <mesh>
         <tubeGeometry args={[remainingCurve, 32, 0.04, 8, false]} />
-        <meshStandardMaterial color="#8b93a1" transparent opacity={0.5} />
+        <meshStandardMaterial color={trailColor} transparent opacity={0.5} />
       </mesh>
 
       {sortedMilestones.map((milestone, index) => {
@@ -269,7 +296,11 @@ export function RoadmapTrail({ goal }: RoadmapTrailProps) {
         const isDone = milestone.completedAt !== null
         const isNext = !isDone && sortedMilestones.slice(0, index).every((m) => m.completedAt !== null)
         const realMilestone = milestones[index]
-        const color = isDone ? '#f5d76e' : isNext ? '#7dd3fc' : '#4b5563'
+        // Both tokenized: lantern is the app's one reserved warm color and a
+        // completed milestone is exactly the meaning-bearing moment it's for
+        // (matching RoadmapPanel's "Mark done" button and celebration banner);
+        // stoneLight replaces the last raw Tailwind gray literal in the scene.
+        const color = isDone ? hexToCssColor(BASE_TOKENS.lantern) : isNext ? trailAccentColor : hexToCssColor(BASE_TOKENS.stoneLight)
 
         return (
           <group key={realMilestone.id}>
@@ -282,9 +313,9 @@ export function RoadmapTrail({ goal }: RoadmapTrailProps) {
             />
             {openMilestoneId === realMilestone.id ? (
               <Html position={[position.x, position.y + 0.3, position.z]} center occlude distanceFactor={8}>
-                <div className="w-40 rounded-md border border-slate-700 bg-slate-900 p-2 text-xs text-slate-100 shadow-lg">
-                  <p className="font-medium">{realMilestone.title}</p>
-                  <p className="mt-1 text-slate-400">{isDone ? 'Done' : isNext ? 'Next up' : 'Not yet'}</p>
+                <div className="w-40 rounded-md border border-stone-light bg-stone/90 p-2 text-xs font-body text-mist shadow-lg backdrop-blur-sm">
+                  <p className="font-display font-medium">{realMilestone.title}</p>
+                  <p className="mt-1 text-mist/60">{isDone ? 'Done' : isNext ? 'Next up' : 'Not yet'}</p>
                 </div>
               </Html>
             ) : null}
@@ -307,14 +338,7 @@ export function RoadmapTrail({ goal }: RoadmapTrailProps) {
       {/* @react-spring/three types position as per-axis FluidValues, not one tuple-valued
           SpringValue — the runtime interpolates this fine either way. */}
       <animated.group position={markerSpring.position as unknown as [number, number, number]}>
-        <mesh position={[0, 0.1, 0]}>
-          <cylinderGeometry args={[0.02, 0.02, 0.2, 6]} />
-          <meshStandardMaterial color="#78350f" />
-        </mesh>
-        <mesh position={[0, 0.22, 0]}>
-          <coneGeometry args={[0.08, 0.12, 6]} />
-          <meshStandardMaterial color="#f97316" />
-        </mesh>
+        <TrailMarker scale={0.3} />
       </animated.group>
     </>
   )

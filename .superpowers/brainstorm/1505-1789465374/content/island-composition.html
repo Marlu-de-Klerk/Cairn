@@ -1,0 +1,73 @@
+<h2>How should each island be built?</h2>
+<p class="subtitle">Soft Lagoon palette applied. All three fix the "flat platform + scattered props" problem and the water-breaking bug the same way — a soft rounded shoreline ring that sits <em>in</em> the water, not a hard-edged platform floating above it. They differ in what the "hero feature" at the center is. Every biome (jungle, desert, tundra, volcano, reef, highlands) would reuse whichever pattern you pick, just re-themed.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="rockpool" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <svg viewBox="0 0 240 200" width="100%" height="180">
+        <rect width="240" height="200" fill="#EAF6F6"/>
+        <ellipse cx="120" cy="150" rx="95" ry="30" fill="#6BC2C9"/>
+        <ellipse cx="120" cy="146" rx="80" ry="24" fill="#8FD4D9"/>
+        <ellipse cx="120" cy="140" rx="66" ry="19" fill="#F2E4C4"/>
+        <path d="M75 100 Q95 75 120 90 Q140 78 150 105 Q165 118 145 135 Q120 148 95 133 Q68 122 75 100 Z" fill="#7A9A93"/>
+        <path d="M110 92 Q116 108 108 122 Q100 132 112 138" stroke="#BEE8EA" stroke-width="6" fill="none" stroke-linecap="round"/>
+        <ellipse cx="112" cy="137" rx="14" ry="6" fill="#8FD4D9"/>
+        <circle cx="72" cy="132" r="7" fill="#8B5A3C"/>
+        <rect x="70" y="132" width="14" height="4" fill="#A9764C" transform="rotate(-15 77 134)"/>
+        <ellipse cx="160" cy="128" rx="10" ry="6" fill="#9ED6B8"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>Rock &amp; Tide Pool</h3>
+      <p>A rounded rock outcrop with a trickling pool at its base, driftwood at the shore. Reads as "a little wild place," works well for jungle/highlands/volcano biomes.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="knoll" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <svg viewBox="0 0 240 200" width="100%" height="180">
+        <rect width="240" height="200" fill="#EAF6F6"/>
+        <ellipse cx="120" cy="150" rx="95" ry="30" fill="#6BC2C9"/>
+        <ellipse cx="120" cy="146" rx="80" ry="24" fill="#8FD4D9"/>
+        <ellipse cx="120" cy="140" rx="66" ry="19" fill="#EFCB8E"/>
+        <ellipse cx="120" cy="128" rx="52" ry="24" fill="#8FD79C"/>
+        <rect x="115" y="70" width="8" height="55" rx="4" fill="#B98452"/>
+        <ellipse cx="119" cy="66" rx="30" ry="16" fill="#6BB889"/>
+        <ellipse cx="100" cy="76" rx="18" ry="12" fill="#7BC98C"/>
+        <ellipse cx="140" cy="78" rx="18" ry="12" fill="#7BC98C"/>
+        <circle cx="80" cy="120" r="10" fill="#7BC98C"/>
+        <circle cx="160" cy="122" r="9" fill="#7BC98C"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>Palm Knoll</h3>
+      <p>A soft grassy mound with one leaning signature tree and round bushes either side. Reads as classic "desert island," works well for desert/reef/tundra biomes.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="garden" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <svg viewBox="0 0 240 200" width="100%" height="180">
+        <rect width="240" height="200" fill="#EAF6F6"/>
+        <ellipse cx="120" cy="150" rx="95" ry="30" fill="#6BC2C9"/>
+        <ellipse cx="120" cy="146" rx="80" ry="24" fill="#8FD4D9"/>
+        <ellipse cx="120" cy="140" rx="66" ry="19" fill="#F2E4C4"/>
+        <ellipse cx="120" cy="130" rx="50" ry="16" fill="#EFCB8E"/>
+        <circle cx="95" cy="118" r="16" fill="#F6A9A0"/>
+        <circle cx="122" cy="110" r="20" fill="#F2C879"/>
+        <circle cx="150" cy="120" r="15" fill="#F6A9A0"/>
+        <circle cx="122" cy="110" r="8" fill="#FFF6EC" opacity="0.6"/>
+        <path d="M75 132 Q85 122 95 132" stroke="#5FBFA8" stroke-width="4" fill="none" stroke-linecap="round"/>
+        <path d="M155 134 Q165 124 175 134" stroke="#5FBFA8" stroke-width="4" fill="none" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>Reef Garden</h3>
+      <p>A flatter coral-and-anemone garden capping a low sandy mound — no tall centerpiece. Reads as calm and horizontal, works well for reef/tundra, less so for volcano/highlands.</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:16px">You can also pick more than one — e.g. "Rock &amp; Tide Pool" for jungle/volcano/highlands and "Palm Knoll" for desert/reef/tundra.</p>

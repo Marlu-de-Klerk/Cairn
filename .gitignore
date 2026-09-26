@@ -8,3 +8,5 @@ dist
 coverage
 .DS_Store
 .claude/
+assets-raw/*
+!assets-raw/.gitkeep

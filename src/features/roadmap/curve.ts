@@ -1,21 +1,24 @@
 // src/features/roadmap/curve.ts
 import { CatmullRomCurve3, Vector3 } from 'three'
 
-// 8 control points across 540° of spiral left the Catmull-Rom spline bowing
-// ~0.1 units inside the cone's faces between them (chord sag scales with the
-// square of the per-segment angle); 24 keeps the spline within the vertical
-// SURFACE_CLEARANCE of the true conical surface everywhere.
+// 8 control points across 540 degrees of spiral left the Catmull-Rom spline
+// bowing ~0.1 units inside the modeled island's implied conical envelope
+// between them (chord sag scales with the square of the per-segment angle);
+// 24 keeps the spline within the vertical SURFACE_CLEARANCE of that envelope
+// everywhere.
 const CONTROL_POINT_COUNT = 24
 const SPIRAL_TURNS = 1.5
-const SURFACE_CLEARANCE = 0.05 // sit just above the cone's surface, not on it
+const SURFACE_CLEARANCE = 0.05 // sit just above the island's surface, not on it
 
 /**
- * The trail spirals from the island's base (t=0) up its sloped placeholder-cone
- * surface to the apex (t=1) — spec §1's "summit at 10", built from the same
- * cone geometry Island.tsx already renders (baseRadius/height must match its
- * coneGeometry args). `seed` rotates the spiral's starting angle so different
- * islands don't all wind the same way — pass something derived from the
- * goal's own id/seed, not a shared constant.
+ * The trail spirals from the island's base (t=0) up to its summit (t=1) —
+ * spec §1's "summit at 10". `baseRadius`/`height` describe a cone-shaped
+ * envelope around the island's real mesh (RoadmapTrail.tsx passes in the
+ * actual, world-scale footprint/height of Island.tsx's rendered geometry —
+ * see that file's ISLAND_SCALE comment), assumed centered on the origin, i.e.
+ * spanning y in [-height/2, height/2]. `seed` rotates the spiral's starting
+ * angle so different islands don't all wind the same way — pass something
+ * derived from the goal's own id/seed, not a shared constant.
  */
 export function buildTrailCurve(baseRadius: number, height: number, seed: number): CatmullRomCurve3 {
   const points: Vector3[] = []
@@ -23,8 +26,6 @@ export function buildTrailCurve(baseRadius: number, height: number, seed: number
     const s = i / CONTROL_POINT_COUNT
     const radiusAtS = baseRadius * (1 - s)
     const angle = seed + s * SPIRAL_TURNS * Math.PI * 2
-    // three.js centres ConeGeometry on the origin, so the cone Island.tsx
-    // renders spans y ∈ [-height/2, height/2] — not [0, height].
     const y = -height / 2 + height * s + SURFACE_CLEARANCE
     points.push(new Vector3(radiusAtS * Math.cos(angle), y, radiusAtS * Math.sin(angle)))
   }

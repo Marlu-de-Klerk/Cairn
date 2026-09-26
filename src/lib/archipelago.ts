@@ -13,8 +13,10 @@ export interface IslandPosition {
  * Deterministic pseudo-random value in [0, 1) from two integers — the
  * classic GLSL sine-hash trick, adapted so the same (seed, index) pair
  * always produces the same jitter (spec: "jittered by archipelago_seed").
+ * Exported for reuse by prop-scatter code (Task 4) — the single source of
+ * this hash, per CLAUDE.md's "don't duplicate this maths" rule.
  */
-function hash01(seed: number, index: number, salt: number): number {
+export function hash01(seed: number, index: number, salt: number): number {
   const x = Math.sin(seed * 12.9898 + index * 78.233 + salt * 37.719) * 43758.5453
   return x - Math.floor(x)
 }

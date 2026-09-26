@@ -13,16 +13,19 @@
     "test:rls": "vitest run tests/rls",
     "db:push": "node scripts/db-push.mjs",
     "db:types": "node scripts/db-types.mjs",
-    "seed": "node scripts/seed.mjs"
+    "seed": "node scripts/seed.mjs",
+    "assets:process": "node scripts/process-asset.mjs"
   },
   "dependencies": {
+    "@fontsource-variable/fraunces": "^5.3.0",
+    "@fontsource/inter": "^5.3.0",
+    "@radix-ui/react-dialog": "1.1.23",
+    "@radix-ui/react-popover": "1.1.23",
+    "@radix-ui/react-select": "2.3.7",
     "@react-spring/three": "10.1.2",
     "@react-three/drei": "10.7.8",
     "@react-three/fiber": "9.7.0",
     "@react-three/postprocessing": "3.1.1",
-    "@radix-ui/react-dialog": "1.1.23",
-    "@radix-ui/react-popover": "1.1.23",
-    "@radix-ui/react-select": "2.3.7",
     "@supabase/supabase-js": "2.116.0",
     "@tanstack/react-query": "5.102.8",
     "lucide-react": "1.43.0",
@@ -35,6 +38,7 @@
     "zustand": "5.0.15"
   },
   "devDependencies": {
+    "@gltf-transform/cli": "^4.5.0",
     "@tailwindcss/vite": "4.3.3",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
@@ -43,6 +47,7 @@
     "@types/react-dom": "19.2.7",
     "@vitejs/plugin-react": "6.1.1",
     "dotenv": "17.4.2",
+    "gltfjsx": "^6.5.3",
     "jsdom": "30.0.1",
     "supabase": "2.117.0",
     "tailwindcss": "4.3.3",
