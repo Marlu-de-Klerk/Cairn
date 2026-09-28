@@ -6,7 +6,11 @@ import type { Goal } from '../archipelago/api'
 import { Island } from '../archipelago/Island'
 import { SceneEnvironment } from '../archipelago/SceneEnvironment'
 import { HullRegistryProvider } from '../archipelago/hullRegistry'
-import { devGoal } from './fixtures'
+import { devGoal, fixtureEntries, fixtureMilestones } from './fixtures'
+import { TrailView } from '../roadmap/RoadmapTrail'
+import { getIslandLayout } from '../archipelago/terrain/islandCache'
+import { isTerraced } from '../../lib/island/biomes'
+import { ISLAND_YAW } from '../../lib/island/orientation'
 import { parseDevParams } from './devParams'
 import type { DevView } from './devParams'
 
@@ -27,7 +31,9 @@ export function DevIslandView() {
   const params = parseDevParams(search)
   const preset = PRESETS[params.view]
   const position = preset.position.map((p, i) => preset.target[i] + (p - preset.target[i]) * params.dist) as [number, number, number]
-  const goal = devGoal(biome, params.seed)
+  const goal = devGoal(biome, params.seed, params.head)
+  const milestones = fixtureMilestones(goal, params.milestones, params.head)
+  const entries = fixtureEntries(goal, milestones, params.entries)
 
   return (
     <div className="fixed inset-0 bg-[#EAF6F6]">
@@ -35,7 +41,12 @@ export function DevIslandView() {
         <SceneEnvironment />
         <HullRegistryProvider>
           <Suspense fallback={null}>
-            <Island goal={goal} onClick={() => undefined} seedOverride={params.seed} />
+            <Island goal={goal} onClick={() => undefined} seedOverride={params.seed} focused />
+            {isTerraced(biome) ? (
+              <group rotation={[0, ISLAND_YAW, 0]}>
+                <TrailView goal={goal} layout={getIslandLayout(biome, params.seed)} milestones={milestones} entries={entries} />
+              </group>
+            ) : null}
           </Suspense>
         </HullRegistryProvider>
         <OrbitControls target={preset.target} />

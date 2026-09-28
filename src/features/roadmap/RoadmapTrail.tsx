@@ -1,325 +1,122 @@
 import { useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
-import { animated, useSpring } from '@react-spring/three'
-import { CatmullRomCurve3, Vector3 } from 'three'
-import type { Mesh } from 'three'
+import { useSpring } from '@react-spring/three'
+import type { Group } from 'three'
 import { entrySide, entryTs, milestoneTs, progressT } from '../../lib/trail'
 import type { TrailGoal, TrailMilestone } from '../../lib/trail'
-import { BASE_TOKENS, getBiomePalette, hashGoalId } from '../../lib/theme'
-import { isTerraced } from '../../lib/island/biomes'
-import { getIslandLayout } from '../archipelago/terrain/islandCache'
-import { buildLegacyConeCurve, buildTrailCurve, perpendicularOffset, positionAt } from './curve'
-import { useMilestones, useProgressEntries } from './api'
-import type { ProgressEntry } from './api'
+import { hashGoalId } from '../../lib/theme'
+import { SHARED_PALETTE, isTerraced } from '../../lib/island/biomes'
+import type { IslandLayout } from '../../lib/island/types'
 import type { Goal } from '../archipelago/api'
-import { TrailMarker } from './models/TrailMarker'
+import { getIslandLayout } from '../archipelago/terrain/islandCache'
+import { useMilestones, useProgressEntries } from './api'
+import type { Milestone, ProgressEntry } from './api'
+import { TRAIL_CLEARANCE, buildTrailCurve, buildTrailRibbon, groundedOffset, positionAt } from './curve'
+import { LegacyRoadmapTrail } from './LegacyRoadmapTrail'
+import { MilestoneCairn } from './MilestoneCairn'
+import type { CairnState } from './MilestoneCairn'
+import { TrailPennant } from './TrailPennant'
 
-// This trail renders as a sibling of Island.tsx's own `<group ref={meshRef}
-// scale={ISLAND_SCALE}>` (same position/rotation, one level out — see
-// ArchipelagoScene.tsx), so these are WORLD-scale numbers: the real,
-// post-ISLAND_SCALE footprint of the five flat-platform biomes (4.4 * 0.447
-// half-width is about 1.97, 4.4 * 0.083 height is about 0.365 - see Island.tsx's
-// ISLAND_SCALE comment for the derivation). Volcano's own taller silhouette
-// (about 3x its siblings' height, per VolcanoLandmass.tsx) isn't given its own
-// height here - its trail apex sits a bit below its actual peak, an accepted,
-// minor trade-off rather than plumbing a per-biome height through this shared
-// curve builder for one biome's cosmetic difference.
-const ISLAND_BASE_RADIUS = 1.97
-const ISLAND_HEIGHT = 0.365
-const CURVE_SAMPLE_COUNT = 100
 const ENTRY_OFFSET_DISTANCE = 0.25
-const NODE_RADIUS = 0.12
+const ENTRY_RADIUS = 0.05
+const DONE_HALF_WIDTH = 0.055
+const TODO_HALF_WIDTH = 0.04
 const MARKER_FLY_DURATION_MS = 900
 const ENTRY_FLY_DURATION_MS = 700
 
-/**
- * A milestone node that isn't done yet but is next in line pulses gently
- * (spec §6.3) — a small continuous scale oscillation, its own component so
- * the animation's useFrame subscription is scoped to just this one mesh
- * rather than fighting other nodes over a shared ref.
- */
-function MilestoneNode({
-  position,
-  color,
-  pulsing,
-  reducedMotion,
-  onClick,
-}: {
-  position: Vector3
-  color: string
-  pulsing: boolean
-  reducedMotion: boolean
-  onClick: () => void
-}) {
-  const meshRef = useRef<Mesh>(null)
-
-  useFrame(({ clock }) => {
-    if (!meshRef.current) return
-    if (!pulsing || reducedMotion) {
-      meshRef.current.scale.setScalar(1)
-      return
-    }
-    const scale = 1 + Math.sin(clock.elapsedTime * 3) * 0.15
-    meshRef.current.scale.setScalar(scale)
-  })
-
-  return (
-    <mesh
-      ref={meshRef}
-      position={[position.x, position.y, position.z]}
-      onClick={(event) => {
-        event.stopPropagation()
-        onClick()
-      }}
-    >
-      <sphereGeometry args={[NODE_RADIUS, 12, 12]} />
-      <meshStandardMaterial color={color} />
-    </mesh>
-  )
-}
-
-/**
- * Spec §6.3: "On save the tag flies to its computed position on the trail."
- * Only entries not already present when this component first saw the entry
- * list animate their entrance (from the marker's position at that moment) —
- * historical entries reloaded on a fresh page load render directly at their
- * final position with no replay, since spec describes a save-time effect,
- * not a load-time one.
- */
-function EntryMarker({
-  finalPosition,
-  flyFrom,
-  entry,
-  unit,
-  open,
-  onClick,
-}: {
-  finalPosition: Vector3
-  flyFrom: Vector3 | null
-  entry: ProgressEntry
-  unit: string | null
-  open: boolean
-  onClick: () => void
-}) {
-  const [spring] = useSpring(
-    () => ({
-      from: { position: (flyFrom ?? finalPosition).toArray() as [number, number, number] },
-      to: { position: finalPosition.toArray() as [number, number, number] },
-      config: { duration: ENTRY_FLY_DURATION_MS },
-    }),
-    [], // animate once, on mount, never re-trigger on prop changes
-  )
-
-  return (
-    // @react-spring/three types a group's position as per-axis FluidValues, not one
-    // tuple-valued SpringValue — the runtime interpolates this fine either way.
-    <animated.group position={spring.position as unknown as [number, number, number]}>
-      <mesh
-        onClick={(event) => {
-          event.stopPropagation()
-          onClick()
-        }}
-      >
-        <sphereGeometry args={[0.06, 8, 8]} />
-        <meshStandardMaterial color={BASE_TOKENS.mist} />
-      </mesh>
-      {open ? (
-        <Html position={[0, 0.2, 0]} center occlude distanceFactor={8}>
-          <div className="w-40 rounded-md border border-stone-light bg-stone/90 p-2 text-xs font-body text-mist shadow-lg backdrop-blur-sm">
-            <p className="font-display font-medium">{entry.title}</p>
-            {entry.value !== null ? (
-              <p className="mt-1 text-mist/60">
-                {entry.value}
-                {unit ? ` ${unit}` : ''}
-              </p>
-            ) : null}
-            {entry.note ? <p className="mt-1 text-mist/40">{entry.note}</p> : null}
-          </div>
-        </Html>
-      ) : null}
-    </animated.group>
-  )
-}
-
 function toTrailGoal(goal: Goal): TrailGoal {
-  return {
-    kind: goal.kind,
-    status: goal.status,
-    startValue: goal.startValue,
-    targetValue: goal.targetValue,
-    currentValue: goal.currentValue,
-  }
+  return { kind: goal.kind, status: goal.status, startValue: goal.startValue, targetValue: goal.targetValue, currentValue: goal.currentValue }
 }
 
-function toTrailMilestones(milestones: { targetValue: number | null; sortOrder: number; completedAt: string | null }[]): TrailMilestone[] {
+function toTrailMilestones(milestones: readonly Milestone[]): TrailMilestone[] {
   return milestones
     .slice()
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((m) => ({ targetValue: m.targetValue, sortOrder: m.sortOrder, completedAt: m.completedAt }))
 }
 
-/**
- * A seed derived from the goal's own id so the same goal's trail always
- * spirals the same way across sessions (deterministic, matching M2's
- * archipelago_seed pattern) — not visually critical, just stable.
- */
-function seedFromId(id: string): number {
-  let hash = 0
-  for (let i = 0; i < id.length; i++) {
-    hash = (hash * 31 + id.charCodeAt(i)) % 1000
-  }
-  return (hash / 1000) * Math.PI * 2
+export interface TrailViewProps {
+  readonly goal: Goal
+  readonly layout: IslandLayout
+  readonly milestones: Milestone[]
+  readonly entries: ProgressEntry[]
 }
 
-// Palette colors are three.js hex numbers (see lib/theme.ts); the milestone/tube
-// materials below are plain string-typed color props (matching the other literal
-// color strings already on this file), so the biome's hex numbers get converted
-// once here rather than mixing number/string color props across the component.
-function hexToCssColor(hex: number): string {
-  return `#${hex.toString(16).padStart(6, '0')}`
+/** Data container: hooks and the layout lookup. The five legacy biomes keep the old spiral until the next plan. */
+export function RoadmapTrail({ goal, seedOverride }: { goal: Goal; seedOverride?: number }) {
+  if (!isTerraced(goal.biome)) return <LegacyRoadmapTrail goal={goal} />
+  return <TerracedRoadmapTrail goal={goal} seedOverride={seedOverride} />
 }
 
-/** Builds a sub-curve from a slice of the parent curve's sampled points —
- * used to render the completed and remaining tube segments separately. At
- * least 2 points are required for a valid CatmullRomCurve3; a shorter slice
- * degenerates to a single point duplicated, which three.js accepts (a
- * zero-length tube) rather than throwing. */
-function subCurve(points: Vector3[], fromIndex: number, toIndex: number): CatmullRomCurve3 {
-  const slice = points.slice(fromIndex, toIndex + 1)
-  if (slice.length < 2) {
-    const only = slice[0] ?? points[0]
-    return new CatmullRomCurve3([only, only.clone()])
-  }
-  return new CatmullRomCurve3(slice)
-}
-
-interface RoadmapTrailProps {
-  goal: Goal
-}
-
-export function RoadmapTrail({ goal }: RoadmapTrailProps) {
+function TerracedRoadmapTrail({ goal, seedOverride }: { goal: Goal; seedOverride?: number }) {
   const { data: milestones, isError: milestonesError } = useMilestones(goal.id)
   const { data: entries, isError: entriesError } = useProgressEntries(goal.id)
+  const layout = useMemo(() => getIslandLayout(goal.biome, seedOverride ?? hashGoalId(goal.id)), [goal.biome, goal.id, seedOverride])
+  // A read failure has nothing to draw; the user-visible message lives in RoadmapPanel.
+  if (milestonesError || entriesError || !milestones || !entries) return null
+  return <TrailView goal={goal} layout={layout} milestones={milestones} entries={entries} />
+}
+
+/** Presentational (spec §4.2), so the dev harness can render it with fixture data. */
+export function TrailView({ goal, layout, milestones, entries }: TrailViewProps) {
   const [openMilestoneId, setOpenMilestoneId] = useState<string | null>(null)
   const [openEntryId, setOpenEntryId] = useState<string | null>(null)
-
-  const curve = useMemo(
-    () =>
-      isTerraced(goal.biome)
-        ? buildTrailCurve(getIslandLayout(goal.biome, hashGoalId(goal.id)).trail.waypoints)
-        : buildLegacyConeCurve(ISLAND_BASE_RADIUS, ISLAND_HEIGHT, seedFromId(goal.id)),
-    [goal.id, goal.biome],
-  )
-
-  // Spec §7: each biome supplies its own trail material — the completed/remaining
-  // tube and the "next milestone" pulse all read from the goal's own biome palette
-  // rather than a fixed color used regardless of biome.
-  const biomePalette = getBiomePalette(goal.biome)
-  const trailColor = hexToCssColor(biomePalette.trail)
-  const trailAccentColor = hexToCssColor(biomePalette.accent)
-
-  const sortedMilestones = useMemo(() => (milestones ? toTrailMilestones(milestones) : []), [milestones])
+  const curve = useMemo(() => buildTrailCurve(layout.trail.waypoints), [layout])
   const trailGoal = useMemo(() => toTrailGoal(goal), [goal])
+  const sorted = useMemo(() => toTrailMilestones(milestones), [milestones])
+  const head = useMemo(() => progressT(trailGoal, sorted), [trailGoal, sorted])
+  const done = useMemo(() => buildTrailRibbon(curve, layout, 0, head, DONE_HALF_WIDTH), [curve, layout, head])
+  const todo = useMemo(() => buildTrailRibbon(curve, layout, head, 1, TODO_HALF_WIDTH), [curve, layout, head])
+  const nodeTs = useMemo(() => milestoneTs(sorted.length), [sorted.length])
+  const reducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-  const head = useMemo(
-    () => (milestones ? progressT(trailGoal, sortedMilestones) : 0),
-    [trailGoal, sortedMilestones, milestones],
-  )
+  const entryMarkers = useMemo(() => {
+    const updates = entries.filter((e) => e.kind === 'update')
+    const ts = entryTs(updates.map((e) => ({ value: e.value, occurredAt: e.occurredAt })), trailGoal, sorted)
+    return updates.map((entry, i) => ({ entry, t: ts[i], position: groundedOffset(curve, layout, ts[i], entrySide(i), ENTRY_OFFSET_DISTANCE, ENTRY_RADIUS).position }))
+  }, [entries, trailGoal, sorted, curve, layout])
 
-  const samplePoints = useMemo(() => curve.getSpacedPoints(CURVE_SAMPLE_COUNT), [curve])
-  const headIndex = Math.round(head * CURVE_SAMPLE_COUNT)
+  const seen = useRef<Set<string> | null>(null)
+  if (seen.current === null) seen.current = new Set(entries.map((e) => e.id))
 
-  const completedCurve = useMemo(() => subCurve(samplePoints, 0, headIndex), [samplePoints, headIndex])
-  const remainingCurve = useMemo(
-    () => subCurve(samplePoints, headIndex, CURVE_SAMPLE_COUNT),
-    [samplePoints, headIndex],
-  )
-
-  const nodeTs = useMemo(() => milestoneTs(sortedMilestones.length), [sortedMilestones.length])
-
-  const entryPositions = useMemo(() => {
-    if (!entries || !milestones) return []
-    const trailEntries = entries.filter((e) => e.kind === 'update') // milestone-kind entries already have their own node
-    const ts = entryTs(
-      trailEntries.map((e) => ({ value: e.value, occurredAt: e.occurredAt })),
-      trailGoal,
-      sortedMilestones,
-    )
-    return trailEntries.map((entry, index) => {
-      const t = ts[index]
-      const base = positionAt(curve, t)
-      const offset = perpendicularOffset(curve, t, entrySide(index), ENTRY_OFFSET_DISTANCE)
-      return { position: base.clone().add(offset), entry }
-    })
-  }, [entries, milestones, curve, trailGoal, sortedMilestones])
-
-  // Only an entry not already known when this component instance first saw
-  // the list gets a fly-in animation (spec §6.3's "on save, the tag flies")
-  // — a fresh page load must not replay every historical entry's entrance.
-  const seenEntryIdsRef = useRef<Set<string> | null>(null)
-  if (seenEntryIdsRef.current === null && entries) {
-    seenEntryIdsRef.current = new Set(entries.map((e) => e.id))
-  }
-
-  const markerTarget = useMemo(() => positionAt(curve, head), [curve, head])
-  const [markerSpring, markerApi] = useSpring(() => ({
-    position: [markerTarget.x, markerTarget.y, markerTarget.z] as [number, number, number],
-    config: { duration: MARKER_FLY_DURATION_MS },
-  }))
-
-  const lastHeadRef = useRef(head)
-  if (lastHeadRef.current !== head) {
-    lastHeadRef.current = head
-    markerApi.start({ position: [markerTarget.x, markerTarget.y, markerTarget.z] })
-  }
-
-  // Spec §7: prefers-reduced-motion respected throughout — gates the "next"
-  // milestone node's pulse, the trail's only continuous animation.
-  const reducedMotion =
-    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
-  // A read failure has nothing to draw; the user-visible message for it lives
-  // in RoadmapPanel, which can render real DOM (this is inside the Canvas).
-  if (milestonesError || entriesError) return null
-  if (!milestones || !entries) return null
+  const pennant = useRef<Group>(null)
+  const [{ t }] = useSpring(() => ({ t: head, config: { duration: MARKER_FLY_DURATION_MS } }), [head])
+  // The pennant walks the curve, so it climbs the ramps rather than cutting through cliffs; nothing else writes it.
+  useFrame(({ invalidate }) => {
+    if (!pennant.current) return
+    const p = positionAt(curve, t.get())
+    pennant.current.position.set(p.x, p.y - TRAIL_CLEARANCE, p.z)
+    if (t.isAnimating) invalidate()
+  })
 
   return (
     <>
-      <mesh>
-        <tubeGeometry args={[completedCurve, 32, 0.06, 8, false]} />
-        <meshStandardMaterial color={trailColor} />
+      <mesh geometry={done} raycast={() => null}>
+        <meshBasicMaterial color={SHARED_PALETTE.trailDone} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
       </mesh>
-      <mesh>
-        <tubeGeometry args={[remainingCurve, 32, 0.04, 8, false]} />
-        <meshStandardMaterial color={trailColor} transparent opacity={0.5} />
+      <mesh geometry={todo} raycast={() => null}>
+        <meshBasicMaterial color={SHARED_PALETTE.trailDone} transparent opacity={0.3} depthWrite={false} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
       </mesh>
 
-      {sortedMilestones.map((milestone, index) => {
-        const t = nodeTs[index]
-        const position = positionAt(curve, t)
+      {milestones.map((milestone, index) => {
+        const p = positionAt(curve, nodeTs[index])
+        const y = layout.groundHeightAt(p.x, p.z)
         const isDone = milestone.completedAt !== null
-        const isNext = !isDone && sortedMilestones.slice(0, index).every((m) => m.completedAt !== null)
-        const realMilestone = milestones[index]
-        // Both tokenized: lantern is the app's one reserved warm color and a
-        // completed milestone is exactly the meaning-bearing moment it's for
-        // (matching RoadmapPanel's "Mark done" button and celebration banner);
-        // stoneLight replaces the last raw Tailwind gray literal in the scene.
-        const color = isDone ? hexToCssColor(BASE_TOKENS.lantern) : isNext ? trailAccentColor : hexToCssColor(BASE_TOKENS.stoneLight)
-
+        const isNext = !isDone && milestones.slice(0, index).every((m) => m.completedAt !== null)
+        const state: CairnState = isDone ? 'done' : isNext ? 'next' : 'pending'
         return (
-          <group key={realMilestone.id}>
-            <MilestoneNode
-              position={position}
-              color={color}
-              pulsing={isNext}
+          <group key={milestone.id}>
+            <MilestoneCairn
+              position={[p.x, y, p.z]}
+              state={state}
               reducedMotion={reducedMotion}
-              onClick={() => setOpenMilestoneId((current) => (current === realMilestone.id ? null : realMilestone.id))}
+              onClick={() => setOpenMilestoneId((current) => (current === milestone.id ? null : milestone.id))}
             />
-            {openMilestoneId === realMilestone.id ? (
-              <Html position={[position.x, position.y + 0.3, position.z]} center occlude distanceFactor={8}>
+            {openMilestoneId === milestone.id ? (
+              <Html position={[p.x, y + 0.35, p.z]} center distanceFactor={8}>
                 <div className="w-40 rounded-md border border-stone-light bg-stone/90 p-2 text-xs font-body text-mist shadow-lg backdrop-blur-sm">
-                  <p className="font-display font-medium">{realMilestone.title}</p>
+                  <p className="font-display font-medium">{milestone.title}</p>
                   <p className="mt-1 text-mist/60">{isDone ? 'Done' : isNext ? 'Next up' : 'Not yet'}</p>
                 </div>
               </Html>
@@ -328,23 +125,63 @@ export function RoadmapTrail({ goal }: RoadmapTrailProps) {
         )
       })}
 
-      {entryPositions.map(({ position, entry }) => (
+      {entryMarkers.map(({ entry, position }) => (
         <EntryMarker
           key={entry.id}
-          finalPosition={position}
-          flyFrom={seenEntryIdsRef.current?.has(entry.id) ? null : markerTarget}
           entry={entry}
           unit={goal.unit}
+          target={[position.x, position.y + ENTRY_RADIUS, position.z]}
+          flyFrom={seen.current?.has(entry.id) ? null : positionAt(curve, head).toArray()}
           open={openEntryId === entry.id}
           onClick={() => setOpenEntryId((current) => (current === entry.id ? null : entry.id))}
         />
       ))}
 
-      {/* @react-spring/three types position as per-axis FluidValues, not one tuple-valued
-          SpringValue — the runtime interpolates this fine either way. */}
-      <animated.group position={markerSpring.position as unknown as [number, number, number]}>
-        <TrailMarker scale={0.3} />
-      </animated.group>
+      <group ref={pennant}>
+        <TrailPennant />
+      </group>
     </>
+  )
+}
+
+/** Only entries saved during this visit fly in from the head marker; historical ones render in place (spec §6.3). */
+function EntryMarker({ entry, unit, target, flyFrom, open, onClick }: {
+  entry: ProgressEntry
+  unit: string | null
+  target: [number, number, number]
+  flyFrom: number[] | null
+  open: boolean
+  onClick: () => void
+}) {
+  const ref = useRef<Group>(null)
+  const [{ u }] = useSpring(() => ({ from: { u: flyFrom ? 0 : 1 }, to: { u: 1 }, config: { duration: ENTRY_FLY_DURATION_MS } }), [])
+  useFrame(({ invalidate }) => {
+    if (!ref.current) return
+    const k = u.get()
+    const from = flyFrom ?? target
+    ref.current.position.set(from[0] + (target[0] - from[0]) * k, from[1] + (target[1] - from[1]) * k, from[2] + (target[2] - from[2]) * k)
+    if (u.isAnimating) invalidate()
+  })
+  return (
+    <group ref={ref}>
+      <mesh
+        onClick={(event) => {
+          event.stopPropagation()
+          onClick()
+        }}
+      >
+        <sphereGeometry args={[ENTRY_RADIUS, 8, 8]} />
+        <meshBasicMaterial color={SHARED_PALETTE.entry} />
+      </mesh>
+      {open ? (
+        <Html position={[0, 0.2, 0]} center distanceFactor={8}>
+          <div className="w-40 rounded-md border border-stone-light bg-stone/90 p-2 text-xs font-body text-mist shadow-lg backdrop-blur-sm">
+            <p className="font-display font-medium">{entry.title}</p>
+            {entry.value !== null ? <p className="mt-1 text-mist/60">{entry.value}{unit ? ` ${unit}` : ''}</p> : null}
+            {entry.note ? <p className="mt-1 text-mist/40">{entry.note}</p> : null}
+          </div>
+        </Html>
+      ) : null}
+    </group>
   )
 }
