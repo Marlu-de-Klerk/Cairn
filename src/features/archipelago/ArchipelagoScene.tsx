@@ -2,7 +2,7 @@ import { Canvas } from '@react-three/fiber'
 import { useMatch, useNavigate } from 'react-router'
 import { useGoals } from './api'
 import { Island } from './Island'
-import { Water } from './Water'
+import { SceneEnvironment } from './SceneEnvironment'
 import { CameraRig } from './CameraRig'
 import { RoadmapTrail } from '../roadmap/RoadmapTrail'
 
@@ -35,10 +35,8 @@ export function ArchipelagoScene({ showCompleted }: ArchipelagoSceneProps) {
 
   return (
     <div className="fixed inset-0 -z-10">
-      <Canvas camera={{ fov: 50 }}>
-        <ambientLight intensity={0.6} />
-        <directionalLight position={[10, 20, 10]} intensity={1} />
-        <Water />
+      <Canvas camera={{ fov: 50 }} flat>
+        <SceneEnvironment />
         {visibleGoals.map((goal) => (
           <Island
             key={goal.id}

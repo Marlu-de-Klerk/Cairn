@@ -48,6 +48,8 @@ interface IslandProps {
   goal: Goal
   onClick: () => void
   focused?: boolean
+  /** DEV harness only: render this seed instead of the one derived from the goal id. */
+  seedOverride?: number
 }
 
 // Palette colors are three.js hex numbers (see lib/theme.ts); the <Html> label/card
@@ -120,7 +122,7 @@ const CARD_Y_BY_BIOME: Record<Goal['biome'], number> = {
   highlands: 0.7,
 }
 
-export function Island({ goal, onClick, focused = false }: IslandProps) {
+export function Island({ goal, onClick, focused = false, seedOverride }: IslandProps) {
   const meshRef = useRef<Group>(null)
   const [hovered, setHovered] = useState(false)
 
@@ -158,7 +160,7 @@ export function Island({ goal, onClick, focused = false }: IslandProps) {
           }}
           onPointerOut={() => setHovered(false)}
         />
-        <Props seed={hashGoalId(goal.id)} count={PROP_COUNT_BY_BIOME[goal.biome]} />
+        <Props seed={seedOverride ?? hashGoalId(goal.id)} count={PROP_COUNT_BY_BIOME[goal.biome]} />
       </group>
 
       <Html position={[0, LABEL_Y_BY_BIOME[goal.biome], 0]} center occlude distanceFactor={12} style={{ pointerEvents: 'none' }}>

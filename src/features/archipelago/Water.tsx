@@ -1,31 +1,15 @@
-import { useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
-import type { Mesh, MeshStandardMaterial } from 'three'
+import { WATER_Y } from '../../lib/island/types'
 
 /**
- * Placeholder water — biome-aware materials/reflections were never picked up
- * by M4 (out of its actual task scope; not a completed milestone). This is a
- * large flat disc, slowly self-rotating with a gentle opacity pulse, just
- * enough to read as water rather than a static floor.
- *
- * Recolored for the 2026-09-15 visual redesign ("Soft Lagoon" — see
- * docs/superpowers/specs/2026-09-15-cairn-visual-redesign.md) — the old dark
- * navy read as a night ocean, which the new light/warm direction retires.
+ * Opaque, unlit Soft Lagoon water. Foam and the shallow halo sit a few millimetres above it, so polygonOffset
+ * pushes the disc back in depth rather than relying on those tiny height gaps. It no longer spins: a rotation.y on
+ * a disc already turned -π/2 about X tilted the sea over time.
  */
 export function Water() {
-  const meshRef = useRef<Mesh>(null)
-
-  useFrame(({ clock }, delta) => {
-    if (!meshRef.current) return
-    meshRef.current.rotation.y += delta * 0.02
-    const material = meshRef.current.material as MeshStandardMaterial
-    material.opacity = 0.88 + Math.sin(clock.elapsedTime * 0.4) * 0.03
-  })
-
   return (
-    <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]}>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, WATER_Y, 0]} raycast={() => null}>
       <circleGeometry args={[60, 64]} />
-      <meshStandardMaterial color="#6BC2C9" transparent opacity={0.88} roughness={0.35} />
+      <meshBasicMaterial color="#6BC2C9" toneMapped={false} polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
     </mesh>
   )
 }
