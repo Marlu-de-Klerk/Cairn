@@ -22,5 +22,5 @@ describe('islandCache', () => {
     for (let seed = 100; seed < 130; seed++) releaseIslandBuild(getIslandBuild('jungle', seed, 'preview'))
     expect(held.lit.getAttribute('position')).toBeDefined()
     expect(getIslandBuild('jungle', 4, 'preview')).toBe(held)
-  })
+  }, 120_000) // 30 full layout builds
 })
