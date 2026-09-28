@@ -81,14 +81,18 @@ class Builder {
   }
 
   /**
-   * A near-vertical wall from p0 to p1 facing `n` (horizontal), banded bottom→top. `lean(f)` pushes a point at height
-   * fraction f outward along n, which gives cliffs their outward lean and slabs.
+   * A near-vertical wall from p0 to p1 facing `n` (horizontal), banded bottom→top. `offset(p, f)` displaces the point
+   * p at height fraction f (cliff lean and slabs). It must depend on p alone, never on the segment, or neighbouring
+   * segments pull their shared corner apart and the wall cracks.
    */
-  wall(p0: Vec2, p1: Vec2, lo0: number, hi0: number, lo1: number, hi1: number, n: Vec2, bands: readonly Band[], lean: (f: number) => number = () => 0) {
+  wall(p0: Vec2, p1: Vec2, lo0: number, hi0: number, lo1: number, hi1: number, n: Vec2, bands: readonly Band[], offset: (p: Vec2, f: number) => Vec2 = NO_OFFSET) {
     const nl = Math.hypot(n[0], n[1]) || 1
     const nx = n[0] / nl
     const nz = n[1] / nl
-    const at = (p: Vec2, lo: number, hi: number, f: number): P3 => [p[0] + nx * lean(f), lo + (hi - lo) * f, p[1] + nz * lean(f)]
+    const at = (p: Vec2, lo: number, hi: number, f: number): P3 => {
+      const o = offset(p, f)
+      return [p[0] + o[0], lo + (hi - lo) * f, p[1] + o[1]]
+    }
     let prev = 0
     for (const [frac, c] of bands) {
       if (frac <= prev) continue
@@ -121,14 +125,17 @@ interface Ctx {
   readonly cliff: (typeof BIOME_TERRAIN)['jungle']['cliff']
   readonly top: number
   readonly noise: (x: number, z: number) => number
+  readonly normals: Map<string, Vec2>
 }
 
 /** Spec §2.4 cliff bands: dark base, main (lit/mid/shade per flute bin, ±12%), light rim, grass lip. */
-function cliffBands(ctx: Ctx, level: number, x: number, z: number, height: number): { bands: Band[]; slab: boolean } {
+function fluteBin(ctx: Ctx, level: number, x: number, z: number): number {
   const blob = ctx.layout.blobs[level]
-  const cx = blob?.cx ?? 0
-  const cz = blob?.cz ?? 0
-  const bin = Math.floor((Math.atan2(z - cz, x - cx) + Math.PI) * ctx.cliff.binsPerRadian)
+  return Math.floor((Math.atan2(z - (blob?.cz ?? 0), x - (blob?.cx ?? 0)) + Math.PI) * ctx.cliff.binsPerRadian)
+}
+
+function cliffBands(ctx: Ctx, level: number, x: number, z: number, height: number): Band[] {
+  const bin = fluteBin(ctx, level, x, z)
   const seed = ctx.layout.seed
   const v = hash01(seed, bin, 200 + level)
   const tone = [ctx.palette.cliffLit, ctx.palette.cliff, ctx.palette.cliffShade][Math.floor(hash01(seed, bin, 230 + level) * 3)]
@@ -137,21 +144,44 @@ function cliffBands(ctx: Ctx, level: number, x: number, z: number, height: numbe
   const baseFrac = ctx.cliff.baseBand[0] + (ctx.cliff.baseBand[1] - ctx.cliff.baseBand[0]) * hash01(seed, bin, 260 + level)
   const lip = Math.min(0.045 / height, 0.2)
   const rim = Math.min(0.06 / height, 0.2)
+  return [[baseFrac, base], [1 - lip - rim, main], [1 - lip, color(ctx.palette.cliffRim).multiplyScalar(0.95 + 0.1 * v)], [1, color(ctx.palette.lip)]]
+}
+
+function wallFor(ctx: Ctx, level: number, x: number, z: number, height: number): { bands: Band[]; offset: (p: Vec2, f: number) => Vec2 } | null {
+  if (height < 0.012) return null
+  const role = ctx.layout.levels[level].wall
+  if (role === 'sand') return { bands: [[1, color(SHARED_PALETTE.sandWall)]], offset: NO_OFFSET }
+  if (role === 'lip') return { bands: [[0.45, color(SHARED_PALETTE.sandWall)], [1, color(ctx.palette.lip)]], offset: NO_OFFSET }
+  if (role !== 'cliff') return null
+  const lean = ctx.cliff.lean * height
   return {
-    bands: [[baseFrac, base], [1 - lip - rim, main], [1 - lip, color(ctx.palette.cliffRim).multiplyScalar(0.95 + 0.1 * v)], [1, color(ctx.palette.lip)]],
-    slab: hash01(seed, bin, 250 + level) < ctx.cliff.slabChance,
+    bands: cliffBands(ctx, level, x, z, height),
+    offset: (p, f) => {
+      const slab = hash01(ctx.layout.seed, fluteBin(ctx, level, p[0], p[1]), 250 + level) < ctx.cliff.slabChance
+      const d = lean * (1 - f) + (slab && f < 0.6 ? 0.06 * (1 - f / 0.6) : 0)
+      if (d === 0) return NO_SHIFT
+      const [ox, oz] = outward(ctx, level, p)
+      return [ox * d, oz * d]
+    },
   }
 }
 
-function wallFor(ctx: Ctx, level: number, x: number, z: number, height: number): { bands: Band[]; lean: (f: number) => number } | null {
-  if (height < 0.012) return null
-  const role = ctx.layout.levels[level].wall
-  if (role === 'sand') return { bands: [[1, color(SHARED_PALETTE.sandWall)]], lean: () => 0 }
-  if (role === 'lip') return { bands: [[0.45, color(SHARED_PALETTE.sandWall)], [1, color(ctx.palette.lip)]], lean: () => 0 }
-  if (role !== 'cliff') return null
-  const { bands, slab } = cliffBands(ctx, level, x, z, height)
-  const lean = ctx.cliff.lean * height
-  return { bands, lean: (f) => lean * (1 - f) + (slab && f < 0.6 ? 0.06 * (1 - f / 0.6) : 0) }
+const NO_SHIFT: Vec2 = [0, 0]
+const NO_OFFSET = (): Vec2 => NO_SHIFT
+
+/** Outward horizontal unit normal of level's outline at p (down the signed-distance gradient), memoised per point. */
+function outward(ctx: Ctx, level: number, p: Vec2): Vec2 {
+  const key = `${level}:${p[0].toFixed(5)}:${p[1].toFixed(5)}`
+  let n = ctx.normals.get(key)
+  if (!n) {
+    const e = 0.01
+    const gx = ctx.layout.sdAt(p[0] + e, p[1])[level] - ctx.layout.sdAt(p[0] - e, p[1])[level]
+    const gz = ctx.layout.sdAt(p[0], p[1] + e)[level] - ctx.layout.sdAt(p[0], p[1] - e)[level]
+    const len = Math.hypot(gx, gz) || 1
+    n = [-gx / len, -gz / len]
+    ctx.normals.set(key, n)
+  }
+  return n
 }
 
 function topColor(ctx: Ctx, level: number, v: V): Color {
@@ -246,7 +276,7 @@ function slice(ctx: Ctx, lit: Builder, cell: number) {
       const hi = layout.levels[level].y
       const spec = wallFor(ctx, level, mx, mz, hi - lo)
       if (!spec) continue
-      lit.wall([p.x, p.z], [q.x, q.z], lo, hi, lo, hi, [low.x - mx, low.z - mz], spec.bands, spec.lean)
+      lit.wall([p.x, p.z], [q.x, q.z], lo, hi, lo, hi, [low.x - mx, low.z - mz], spec.bands, spec.offset)
     }
   }
 
@@ -352,7 +382,7 @@ function corridor(ctx: Ctx, lit: Builder, coarse: boolean) {
       if (h < 0.01) continue
       const cut = ta + tb > a.p.y + b.p.y
       const level = Math.max(BEACH, layout.levelAt(pa[0] + out[0] * 0.1, pa[1] + out[1] * 0.1))
-      const bands: Band[] = h < 0.05 || coarse ? [[1, color(h < 0.05 ? palette.lip : palette.cliff)]] : cliffBands(ctx, Math.max(LAWN + 1, level), pa[0], pa[1], h).bands
+      const bands: Band[] = h < 0.05 || coarse ? [[1, color(h < 0.05 ? palette.lip : palette.cliff)]] : cliffBands(ctx, Math.max(LAWN + 1, level), pa[0], pa[1], h)
       lit.wall(pa, pb, lo0, hi0, lo1, hi1, cut ? [-out[0], -out[1]] : out, bands)
     }
   }
@@ -383,7 +413,7 @@ function features(ctx: Ctx, lit: Builder, unlit: Builder, coarse: boolean) {
       const r = rayExit(inside, shelf.blob.cx, shelf.blob.cz, a)
       ring.push([shelf.blob.cx + Math.cos(a) * r, shelf.blob.cz + Math.sin(a) * r])
     }
-    prism(lit, ring, shelf.baseY, shelf.y, color(palette.cap), (k) => cliffBands(ctx, below, ring[k][0], ring[k][1], shelf.y - shelf.baseY).bands)
+    prism(lit, ring, shelf.baseY, shelf.y, color(palette.cap), (k) => cliffBands(ctx, below, ring[k][0], ring[k][1], shelf.y - shelf.baseY))
   }
   if (f.pool) {
     const poolC = color(palette.pool ?? SHARED_PALETTE.shallow)
@@ -530,7 +560,7 @@ function hull(ctx: Ctx): BufferGeometry {
 export function buildTerrain(layout: IslandLayout, detail: IslandDetail): TerrainMeshes {
   const cfg = BIOME_TERRAIN[layout.biome]
   const n = valueNoise2(layout.seed, 310)
-  const ctx: Ctx = { layout, palette: cfg.palette, cliff: cfg.cliff, top: layout.levels.length - 1, noise: (x, z) => 2 * n(x, z) - 1 }
+  const ctx: Ctx = { layout, palette: cfg.palette, cliff: cfg.cliff, top: layout.levels.length - 1, noise: (x, z) => 2 * n(x, z) - 1, normals: new Map() }
   const lit = new Builder()
   const unlit = new Builder()
   slice(ctx, lit, CELL[detail])
