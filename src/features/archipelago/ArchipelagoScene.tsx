@@ -3,6 +3,7 @@ import { useMatch, useNavigate } from 'react-router'
 import { useGoals } from './api'
 import { Island } from './Island'
 import { SceneEnvironment } from './SceneEnvironment'
+import { HullRegistryProvider } from './hullRegistry'
 import { CameraRig } from './CameraRig'
 import { RoadmapTrail } from '../roadmap/RoadmapTrail'
 
@@ -37,6 +38,7 @@ export function ArchipelagoScene({ showCompleted }: ArchipelagoSceneProps) {
     <div className="fixed inset-0 -z-10">
       <Canvas camera={{ fov: 50 }} flat>
         <SceneEnvironment />
+        <HullRegistryProvider>
         {visibleGoals.map((goal) => (
           <Island
             key={goal.id}
@@ -50,6 +52,7 @@ export function ArchipelagoScene({ showCompleted }: ArchipelagoSceneProps) {
             <RoadmapTrail key={focusedGoal.id} goal={focusedGoal} />
           </group>
         ) : null}
+        </HullRegistryProvider>
         <CameraRig focusedGoal={focusedGoal} initialAzimuth={initialAzimuth} />
       </Canvas>
     </div>

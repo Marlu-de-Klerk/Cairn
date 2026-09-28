@@ -5,6 +5,7 @@ import { OrbitControls } from '@react-three/drei'
 import type { Goal } from '../archipelago/api'
 import { Island } from '../archipelago/Island'
 import { SceneEnvironment } from '../archipelago/SceneEnvironment'
+import { HullRegistryProvider } from '../archipelago/hullRegistry'
 import { devGoal } from './fixtures'
 import { parseDevParams } from './devParams'
 import type { DevView } from './devParams'
@@ -32,9 +33,11 @@ export function DevIslandView() {
     <div className="fixed inset-0 bg-[#EAF6F6]">
       <Canvas flat camera={{ position, fov: 50 }}>
         <SceneEnvironment />
-        <Suspense fallback={null}>
-          <Island goal={goal} onClick={() => undefined} seedOverride={params.seed} />
-        </Suspense>
+        <HullRegistryProvider>
+          <Suspense fallback={null}>
+            <Island goal={goal} onClick={() => undefined} seedOverride={params.seed} />
+          </Suspense>
+        </HullRegistryProvider>
         <OrbitControls target={preset.target} />
       </Canvas>
     </div>
