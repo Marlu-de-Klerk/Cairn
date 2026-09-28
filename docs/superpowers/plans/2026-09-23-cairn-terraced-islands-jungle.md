@@ -6300,3 +6300,16 @@ git add src/features/roadmap/RoadmapTrail.tsx src/features/roadmap/LegacyRoadmap
 ```
 
 ---
+
+### Task 18: Focus pose, focus orbit and the demand frameloop
+
+*Written and implemented 2026-09-28 (the original plan stopped after Task 17).*
+
+**Files:** Modify `src/features/archipelago/CameraRig.tsx`, `ArchipelagoScene.tsx`, `src/features/dev/devParams.ts`, `devParams.test.ts`, `DevIslandView.tsx`.
+
+- `CameraRig`: a focused terraced goal flies to `focusPose(getIslandLayout(biome, seedOverride ?? hashGoalId(id)), { aspect, fovDeg: camera.fov, insetRightPx: width ≥ 640 ? 288 : 0, viewportPx: size, orbit })` (spec §5.6). Legacy biomes keep the old approach pose. The fly-to easing is unchanged.
+- Focus orbit (spec §5.6.1): its own `orbit` ref, reset to 0 on every focus change; a horizontal drag changes it (same `DRAG_SENSITIVITY`, drag-vs-click threshold and click suppression) only while a terraced goal is focused and no flight is running; each move calls `invalidate()`. The overview `azimuth` is never touched while focused.
+- `ArchipelagoScene`: `frameloop="demand"` while a terraced goal is focused, `always` otherwise (the overview auto-rotate and the legacy trail/models animate without `invalidate()`); `touch-action: none` on the canvas. The camera flight calls `invalidate()` each frame while it runs.
+- Dev harness: views `focus`, `orbit-back` (orbit π) and `phone` render the real `CameraRig` with `devOrbit` (fixed orbit, drag disabled); `orbit=<radians>` overrides.
+
+Verify: `npm run render:island -- jungle 1 focus`, `jungle 1 orbit-back`, `jungle 1 phone`: the whole island in frame, shifted left of the panel on desktop, the back (waterfall side) at orbit π.

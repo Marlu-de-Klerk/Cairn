@@ -38,7 +38,15 @@ export function ArchipelagoScene({ showCompleted }: ArchipelagoSceneProps) {
 
   return (
     <div className="fixed inset-0 -z-10">
-      <Canvas camera={{ fov: 50 }} flat>
+      {/* A focused terraced island redraws only on demand: every animator there (camera flight, orbit drag, trail
+          springs, cairn pulse, hover lift) calls invalidate(). Legacy biomes and the overview's auto-rotate still
+          animate every frame. touch-action: none keeps a one-finger orbit drag from scrolling the page. */}
+      <Canvas
+        camera={{ fov: 50 }}
+        flat
+        frameloop={focusedGoal && isTerraced(focusedGoal.biome) ? 'demand' : 'always'}
+        style={{ touchAction: 'none' }}
+      >
         <SceneEnvironment />
         <HullRegistryProvider>
         {visibleGoals.map((goal) => (

@@ -11,12 +11,15 @@ import { TrailView } from '../roadmap/RoadmapTrail'
 import { getIslandLayout } from '../archipelago/terrain/islandCache'
 import { isTerraced } from '../../lib/island/biomes'
 import { ISLAND_YAW } from '../../lib/island/orientation'
-import { parseDevParams } from './devParams'
+import { CameraRig } from '../archipelago/CameraRig'
+import { isFocusView, parseDevParams } from './devParams'
 import type { DevView } from './devParams'
 
 const BIOMES: readonly Goal['biome'][] = ['jungle', 'desert', 'tundra', 'volcano', 'reef', 'highlands']
 
-const PRESETS: Record<DevView, { position: [number, number, number]; target: [number, number, number] }> = {
+type PresetView = Exclude<DevView, 'focus' | 'orbit-back' | 'phone'>
+
+const PRESETS: Record<PresetView, { position: [number, number, number]; target: [number, number, number] }> = {
   hero: { position: [8.5, 7.5, 8.5], target: [0, 1.0, 0] },
   side: { position: [11, 3.2, 0.5], target: [0, 1.2, 0] },
   top: { position: [0.01, 15, 0.01], target: [0, 0, 0] },
@@ -29,7 +32,8 @@ export function DevIslandView() {
   const biome = BIOMES.includes(raw as Goal['biome']) ? (raw as Goal['biome']) : 'jungle'
   const [search] = useSearchParams()
   const params = parseDevParams(search)
-  const preset = PRESETS[params.view]
+  const focusView = isFocusView(params.view)
+  const preset = PRESETS[focusView ? 'hero' : (params.view as PresetView)]
   const position = preset.position.map((p, i) => preset.target[i] + (p - preset.target[i]) * params.dist) as [number, number, number]
   const goal = devGoal(biome, params.seed, params.head)
   const milestones = fixtureMilestones(goal, params.milestones, params.head)
@@ -49,7 +53,11 @@ export function DevIslandView() {
             ) : null}
           </Suspense>
         </HullRegistryProvider>
-        <OrbitControls target={preset.target} />
+        {focusView ? (
+          <CameraRig focusedGoal={goal} seedOverride={params.seed} devOrbit={params.orbit} />
+        ) : (
+          <OrbitControls target={preset.target} />
+        )}
       </Canvas>
     </div>
   )
