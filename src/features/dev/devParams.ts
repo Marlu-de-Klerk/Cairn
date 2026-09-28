@@ -1,6 +1,9 @@
+import type { LitMaterialKind } from '../archipelago/terrain/materials'
+
 export type DevView =
   | 'hero' | 'side' | 'top' | 'back'   // preset cameras + OrbitControls
   | 'focus' | 'orbit-back' | 'phone'   // the real CameraRig focus pose (orbit-back = orbit π)
+  | 'overview'                         // `islands` islands at their real archipelago positions, mixed biomes
 
 export interface DevParams {
   readonly seed: number
@@ -10,9 +13,11 @@ export interface DevParams {
   readonly head: number
   readonly entries: number
   readonly orbit: number
+  readonly islands: number
+  readonly material: LitMaterialKind
 }
 
-const VIEWS: readonly DevView[] = ['hero', 'side', 'top', 'back', 'focus', 'orbit-back', 'phone']
+const VIEWS: readonly DevView[] = ['hero', 'side', 'top', 'back', 'focus', 'orbit-back', 'phone', 'overview']
 
 export function isFocusView(view: DevView): boolean {
   return view === 'focus' || view === 'orbit-back' || view === 'phone'
@@ -35,5 +40,7 @@ export function parseDevParams(search: URLSearchParams): DevParams {
     head: Math.max(0, Math.min(1, number(search, 'head', 0.55))),
     entries: Math.max(0, Math.min(8, Math.floor(number(search, 'entries', 3)))),
     orbit: number(search, 'orbit', view === 'orbit-back' ? Math.PI : 0),
+    islands: Math.max(1, Math.min(20, Math.floor(number(search, 'islands', 8)))),
+    material: search.get('material') === 'lambert' ? 'lambert' : 'toon',
   }
 }

@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "test:rls": "vitest run tests/rls",
     "test:island-sweep": "node scripts/island-sweep.mjs",
+    "bench:island": "node scripts/island-bench.mjs",
     "db:push": "node scripts/db-push.mjs",
     "db:types": "node scripts/db-types.mjs",
     "seed": "node scripts/seed.mjs",
