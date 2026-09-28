@@ -6,6 +6,8 @@ import { SceneEnvironment } from './SceneEnvironment'
 import { HullRegistryProvider } from './hullRegistry'
 import { CameraRig } from './CameraRig'
 import { RoadmapTrail } from '../roadmap/RoadmapTrail'
+import { isTerraced } from '../../lib/island/biomes'
+import { ISLAND_YAW } from '../../lib/island/orientation'
 
 interface ArchipelagoSceneProps {
   showCompleted: boolean
@@ -48,7 +50,7 @@ export function ArchipelagoScene({ showCompleted }: ArchipelagoSceneProps) {
           />
         ))}
         {focusedGoal ? (
-          <group position={[focusedGoal.islandX, 0, focusedGoal.islandZ]} rotation={[0, focusedGoal.islandRotation, 0]}>
+          <group position={[focusedGoal.islandX, 0, focusedGoal.islandZ]} rotation={[0, isTerraced(focusedGoal.biome) ? ISLAND_YAW : focusedGoal.islandRotation, 0]}>
             <RoadmapTrail key={focusedGoal.id} goal={focusedGoal} />
           </group>
         ) : null}

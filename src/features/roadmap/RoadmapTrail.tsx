@@ -6,8 +6,10 @@ import { CatmullRomCurve3, Vector3 } from 'three'
 import type { Mesh } from 'three'
 import { entrySide, entryTs, milestoneTs, progressT } from '../../lib/trail'
 import type { TrailGoal, TrailMilestone } from '../../lib/trail'
-import { BASE_TOKENS, getBiomePalette } from '../../lib/theme'
-import { buildTrailCurve, perpendicularOffset, positionAt } from './curve'
+import { BASE_TOKENS, getBiomePalette, hashGoalId } from '../../lib/theme'
+import { isTerraced } from '../../lib/island/biomes'
+import { getIslandLayout } from '../archipelago/terrain/islandCache'
+import { buildLegacyConeCurve, buildTrailCurve, perpendicularOffset, positionAt } from './curve'
 import { useMilestones, useProgressEntries } from './api'
 import type { ProgressEntry } from './api'
 import type { Goal } from '../archipelago/api'
@@ -203,8 +205,11 @@ export function RoadmapTrail({ goal }: RoadmapTrailProps) {
   const [openEntryId, setOpenEntryId] = useState<string | null>(null)
 
   const curve = useMemo(
-    () => buildTrailCurve(ISLAND_BASE_RADIUS, ISLAND_HEIGHT, seedFromId(goal.id)),
-    [goal.id],
+    () =>
+      isTerraced(goal.biome)
+        ? buildTrailCurve(getIslandLayout(goal.biome, hashGoalId(goal.id)).trail.waypoints)
+        : buildLegacyConeCurve(ISLAND_BASE_RADIUS, ISLAND_HEIGHT, seedFromId(goal.id)),
+    [goal.id, goal.biome],
   )
 
   // Spec §7: each biome supplies its own trail material — the completed/remaining
