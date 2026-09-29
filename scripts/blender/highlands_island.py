@@ -67,8 +67,20 @@ def stone(x, y, z):
     return mix(k, col(HL['lichen']), smooth((lichen - 0.25) / 0.2) * 0.45)
 
 
+def loch_radius(a):
+    """Shoreline radius of the loch in direction a (layout xz), interpolated between its samples."""
+    cx, cz, radii = LOCH
+    n = len(radii)
+    f = (a % (2 * math.pi)) / (2 * math.pi) * n
+    i = int(f) % n
+    t = f - int(f)
+    return radii[i] * (1 - t) + radii[(i + 1) % n] * t
+
+
 def loch_dist(x, z):
-    return math.hypot(x - LOCH[0], z - LOCH[1]) - LOCH[2] if LOCH else 9.0
+    if not LOCH:
+        return 9.0
+    return math.hypot(x - LOCH[0], z - LOCH[1]) - loch_radius(math.atan2(z - LOCH[1], x - LOCH[0]))
 
 
 def moor(x, z, top=False):
@@ -286,40 +298,47 @@ def drystone_wall(sink, pts, r):
 
 # ---------------------------------------------------------------------------------------------------------- placement
 
-LOCH = None  # (x, z, radius) once placed
+LOCH = None  # (x, z, shoreline radius per angle) once placed
 
 
 def loch(ground, sink, unlit, keep_out):
-    """Grows the lawn pool into as big a loch as the lawn allows, with a pale misty rim on the water."""
+    """Grows the lawn pool into a proper loch: each direction reaches as far as the lawn and trail allow, so the
+    shoreline is irregular. Deep water in the middle shading to shallows, a pebbly shore, reeds, lily pads, and a
+    jetty with a rowboat."""
     global LOCH
     pool = D['features']['pool']
     if not pool:
         return
     px, pz = pool['x'], pool['z']
-    pr = pool['r']
-    for rr in (0.5, 0.46, 0.42, 0.38, 0.34, 0.3):
-        ok = True
-        for k in range(24):
-            a = 2 * math.pi * k / 24
-            x, z = px + math.cos(a) * (rr + 0.06), pz + math.sin(a) * (rr + 0.06)
-            gy, _ = ground.at(x, z)
-            if gy is None or abs(gy - LEVEL_Y[LAWN]) > 0.005 or ground.trail_distance(x, z, LEVEL_Y[LAWN]) < HW + 0.05:
-                ok = False
-                break
-        if ok:
-            pr = rr
-            break
-    LOCH = (px, pz, pr)
-    y = LEVEL_Y[LAWN] + 0.004
-    n = 48
-    edge = []
+    n = 64
+    reach = []
     for k in range(n):
         a = 2 * math.pi * k / n
-        wob = 1 + 0.08 * noise.noise(Vector((math.cos(a) * 2, math.sin(a) * 2, 3.7)))
-        edge.append((px + math.cos(a) * pr * wob, pz + math.sin(a) * pr * wob))
+        r = pool['r'] * 0.8
+        while r < 0.9:
+            x, z = px + math.cos(a) * (r + 0.07), pz + math.sin(a) * (r + 0.07)
+            gy, _ = ground.at(x, z)
+            if gy is None or abs(gy - LEVEL_Y[LAWN]) > 0.005 or ground.trail_distance(x, z, LEVEL_Y[LAWN]) < HW + 0.06:
+                break
+            if any(math.hypot(x - kx, z - kz) < kr for kx, kz, kr in keep_out):
+                break
+            r += 0.01
+        reach.append(r)
+    # smooth the reach (so the shore curves rather than zigzags), then add bays and points
+    radii = []
+    for k in range(n):
+        avg = sum(reach[(k + j) % n] for j in range(-3, 4)) / 7
+        r = min(avg, min(reach[(k + j) % n] for j in range(-1, 2)))
+        a = 2 * math.pi * k / n
+        r *= 0.93 + 0.07 * noise.noise(Vector((math.cos(a) * 2.5, math.sin(a) * 2.5, 6.2)))
+        radii.append(max(pool['r'] * 0.8, r))
+    LOCH = (px, pz, radii)
+    y = LEVEL_Y[LAWN] + 0.004
+    edge = [(px + math.cos(2 * math.pi * k / n) * radii[k], pz + math.sin(2 * math.pi * k / n) * radii[k]) for k in range(n)]
     centre = [(px, pz)] * n
-    rings = [(lerp_outline(edge, centre, 0.999), col(HL['loch'])), (lerp_outline(edge, centre, 0.5), col(HL['lochMid'])),
-             (lerp_outline(edge, centre, 0.12), col(HL['lochEdge'])), (edge, col(HL['mist']))]
+    deep, mid, shallow, edge_c = col('#2F6C84'), col(HL['loch']), col(HL['lochMid']), col(HL['lochEdge'])
+    rings = [(lerp_outline(edge, centre, 0.999), deep), (lerp_outline(edge, centre, 0.7), deep), (lerp_outline(edge, centre, 0.4), mid),
+             (lerp_outline(edge, centre, 0.15), shallow), (lerp_outline(edge, centre, 0.04), edge_c), (edge, col(HL['mist']))]
     verts = [[unlit.bm.verts.new(P(x, y, z)) for x, z in pts] for pts, _ in rings]
     for rr in range(len(verts) - 1):
         for i in range(n):
@@ -330,20 +349,97 @@ def loch(ground, sink, unlit, keep_out):
             f.normal_update()
             if f.normal.z < 0:
                 f.normal_flip()
-    keep_out.append((px, pz, pr + 0.1))
-    keep_out.append((px, pz + 0.25, pr + 0.2))  # keep tall trees out from in front of the loch
-    print('loch', round(pr, 2))
+    # a few pale ripple streaks on the water, catching the light
+    for k in range(5):
+        a = rng.uniform(0, 2 * math.pi)
+        d = loch_radius(a) * rng.uniform(0.2, 0.6)
+        x, z = px + math.cos(a) * d, pz + math.sin(a) * d
+        L = rng.uniform(0.06, 0.12)
+        unlit.face(frame(x, z, y + 0.001, 0.3), [(-L / 2, -0.003, 0), (L / 2, -0.003, 0), (L / 2, 0.003, 0), (-L / 2, 0.003, 0)], col('#CFE7EA'))
+    # pebbly shore
+    for k in range(0, n):
+        if rng.random() < 0.45:
+            continue
+        a = 2 * math.pi * k / n + rng.uniform(-0.03, 0.03)
+        r = radii[k] + rng.uniform(-0.005, 0.03)
+        x, z = px + math.cos(a) * r, pz + math.sin(a) * r
+        c = col(rng.choice((HL['stoneLit'], HL['stone'], '#CFC6B0')))
+        sink.blob(frame(x, z, y - 0.006), (0, 0, 0.003), rng.uniform(0.009, 0.018), c, mix(c, col('#000000'), 0.1), mix(c, col('#000000'), 0.2), subdiv=0, squash=0.5, jitter=0.15, seed=k)
+    # reeds in clumps along the shallows
+    for k in range(0, n, 5):
+        if rng.random() < 0.4:
+            continue
+        a = 2 * math.pi * k / n
+        r = radii[k] - 0.02
+        x, z = px + math.cos(a) * r, pz + math.sin(a) * r
+        M = frame(x, z, y - 0.004, rng.uniform(0, 6.3))
+        for i in range(rng.randint(5, 8)):
+            o = Vector((rng.uniform(-0.025, 0.025), rng.uniform(-0.025, 0.025), 0))
+            lean = Vector((rng.uniform(-0.02, 0.02), rng.uniform(-0.02, 0.02), 0))
+            hh = rng.uniform(0.07, 0.12)
+            sink.cyl(M, [tuple(o), tuple(o + lean * 0.5 + Vector((0, 0, hh * 0.6))), tuple(o + lean + Vector((0, 0, hh)))], [0.003, 0.0028, 0.0015], 3, [col('#7F9A55')])
+            if rng.random() < 0.4:
+                sink.cyl(M, [tuple(o + lean * 0.85 + Vector((0, 0, hh * 0.75))), tuple(o + lean * 0.95 + Vector((0, 0, hh * 0.9)))], [0.006, 0.006], 4, [col('#6A4A30')])
+    # lily pads in a sheltered corner
+    a0 = rng.uniform(0, 2 * math.pi)
+    for k in range(7):
+        a = a0 + rng.uniform(-0.4, 0.4)
+        d = loch_radius(a) * rng.uniform(0.6, 0.85)
+        x, z = px + math.cos(a) * d, pz + math.sin(a) * d
+        rr = rng.uniform(0.014, 0.024)
+        pts = [(math.cos(t) * rr, math.sin(t) * rr, 0) for t in [0.5 + 2 * math.pi * m / 9 * 0.92 for m in range(10)]] + [(0, 0, 0)]
+        sink.face(frame(x, z, y + 0.002, rng.uniform(0, 6.3)), pts, col('#5E9A58'))
+        if rng.random() < 0.4:
+            sink.blob(frame(x, z, y + 0.006), (0, 0, 0), 0.006, col('#FFF4F4'), col('#F6C8D0'), col('#F6C8D0'), subdiv=0, jitter=0)
+    # a short jetty on the camera side with a rowboat tied up
+    best = None
+    for k in range(n):
+        a = 2 * math.pi * k / n
+        if math.sin(a) < 0.3:
+            continue
+        x, z = px + math.cos(a) * (radii[k] + 0.1), pz + math.sin(a) * (radii[k] + 0.1)
+        gy, _ = ground.at(x, z)
+        if gy is None or abs(gy - LEVEL_Y[LAWN]) > 0.005 or ground.trail_distance(x, z, LEVEL_Y[LAWN]) < HW + 0.12:
+            continue
+        score = radii[k]
+        if best is None or score > best[0]:
+            best = (score, a, k)
+    if best:
+        _, a, k = best
+        dx, dz = math.cos(a), math.sin(a)
+        sx, sz = px + dx * (radii[k] + 0.08), pz + dz * (radii[k] + 0.08)
+        yaw = math.atan2(-dz, dx)  # local +x points out from the loch centre
+        J = frame(sx, sz, y, yaw)
+        for m in range(6):  # planks running inward
+            x0 = -m * 0.035
+            sink.face(J, [(x0, -0.03, 0.02), (x0 - 0.03, -0.03, 0.02), (x0 - 0.03, 0.03, 0.02), (x0, 0.03, 0.02)], col(HL['bracken']) if m % 2 else col('#A07A52'))
+        for x0 in (0.0, -0.1, -0.19):
+            for yy in (-0.028, 0.028):
+                sink.cyl(J, [(x0, yy, -0.03), (x0, yy, 0.03)], [0.005, 0.005], 4, [col('#6A4A30')])
+        B = J @ Matrix.Translation((-0.16, 0.07, -0.005)) @ Matrix.Rotation(0.1, 4, 'Z')
+        L2, W2 = 0.07, 0.028
+        hull = [(-L2, 0, 0.012), (-L2 * 0.6, -W2, 0.014), (L2 * 0.6, -W2, 0.014), (L2, 0, 0.016), (L2 * 0.6, W2, 0.014), (-L2 * 0.6, W2, 0.014)]
+        for i in range(len(hull)):
+            p, q = hull[i], hull[(i + 1) % len(hull)]
+            sink.face(B, [(p[0] * 0.7, p[1] * 0.5, -0.005), (q[0] * 0.7, q[1] * 0.5, -0.005), q, p], col('#7A4E34'), double=True)
+        sink.face(B, [(p[0] * 0.8, p[1] * 0.8, 0.008) for p in hull], col('#B98A62'))
+        sink.cyl(B, [(0, -W2 * 0.9, 0.012), (0, W2 * 0.9, 0.012)], [0.004, 0.004], 3, [col('#6A4A30')])  # thwart
+        keep_out.append((sx, sz, 0.18))
+    keep_out.append((px, pz, max(radii) + 0.1))
+    keep_out.append((px, pz + 0.3, max(radii) * 0.8 + 0.15))  # keep tall trees out from in front of the loch
+    print('loch', round(min(radii), 2), round(max(radii), 2))
 
 
 def burn_and_bridge(ground, sink, unlit, keep_out):
     """A burn from the loch's far edge down to the sea, clear of the trail, with a stone bridge over it."""
     if not LOCH:
         return
-    px, pz, pr = LOCH
+    px, pz, _ = LOCH
     best = None
     for k in range(36):
         a = 2 * math.pi * k / 36
         dx, dz = math.cos(a), math.sin(a)
+        pr = loch_radius(a)
         x, z = px + dx * (pr - 0.02), pz + dz * (pr - 0.02)
         length, clear = 0.0, 9.0
         while True:
@@ -363,6 +459,7 @@ def burn_and_bridge(ground, sink, unlit, keep_out):
         return
     _, a, length = best
     dx, dz = math.cos(a), math.sin(a)
+    pr = loch_radius(a)
     sx, sz = px + dx * (pr - 0.03), pz + dz * (pr - 0.03)
     STREAMS.append((sx, sz, sx + dx * length, sz + dz * length))
     cascade(ground, unlit, sx, sz, dx, dz)
