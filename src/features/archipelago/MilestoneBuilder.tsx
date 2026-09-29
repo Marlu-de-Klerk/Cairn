@@ -5,6 +5,7 @@ import { BIOME_TERRAIN, SHARED_PALETTE } from '../../lib/island/biomes'
 import { ISLAND_YAW } from '../../lib/island/orientation'
 import { getIslandLayout } from './terrain/islandCache'
 import type { Goal } from './api'
+import { islandLayoutSeed } from '../../lib/island/fixedIslands'
 
 const MAX_MILESTONES = 8
 
@@ -82,7 +83,7 @@ export function MilestoneBuilder({ kind, milestones, errors, onChange }: Milesto
  * invariant (CLAUDE.md) — never proportional to each milestone's value.
  */
 function TrailPreview({ count }: { count: number }) {
-  const layout = useMemo(() => getIslandLayout('jungle', BIOME_TERRAIN.jungle.previewSeed), [])
+  const layout = useMemo(() => getIslandLayout('jungle', islandLayoutSeed('jungle', BIOME_TERRAIN.jungle.previewSeed)), [])
   const curve = useMemo(() => buildTrailCurve(layout.trail.waypoints), [layout])
   const ribbon = useMemo(() => buildTrailRibbon(curve, layout, 0, 1, 0.05), [curve, layout])
   const dots = useMemo(

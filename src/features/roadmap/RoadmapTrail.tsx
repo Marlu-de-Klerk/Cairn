@@ -6,6 +6,7 @@ import type { Group } from 'three'
 import { entrySide, entryTs, milestoneTs, progressT } from '../../lib/trail'
 import type { TrailGoal, TrailMilestone } from '../../lib/trail'
 import { hashGoalId } from '../../lib/theme'
+import { islandLayoutSeed } from '../../lib/island/fixedIslands'
 import { SHARED_PALETTE, isTerraced } from '../../lib/island/biomes'
 import type { IslandLayout } from '../../lib/island/types'
 import type { Goal } from '../archipelago/api'
@@ -52,7 +53,7 @@ export function RoadmapTrail({ goal, seedOverride }: { goal: Goal; seedOverride?
 function TerracedRoadmapTrail({ goal, seedOverride }: { goal: Goal; seedOverride?: number }) {
   const { data: milestones, isError: milestonesError } = useMilestones(goal.id)
   const { data: entries, isError: entriesError } = useProgressEntries(goal.id)
-  const layout = useMemo(() => getIslandLayout(goal.biome, seedOverride ?? hashGoalId(goal.id)), [goal.biome, goal.id, seedOverride])
+  const layout = useMemo(() => getIslandLayout(goal.biome, islandLayoutSeed(goal.biome, seedOverride ?? hashGoalId(goal.id))), [goal.biome, goal.id, seedOverride])
   // A read failure has nothing to draw; the user-visible message lives in RoadmapPanel.
   if (milestonesError || entriesError || !milestones || !entries) return null
   return <TrailView goal={goal} layout={layout} milestones={milestones} entries={entries} />

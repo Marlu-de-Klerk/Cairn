@@ -5,6 +5,7 @@ import { Html } from '@react-three/drei'
 import type { Group, Object3D } from 'three'
 import type { Goal } from './api'
 import { getBiomePalette, hashGoalId } from '../../lib/theme'
+import { islandLayoutSeed } from '../../lib/island/fixedIslands'
 import { isTerraced } from '../../lib/island/biomes'
 import { ISLAND_YAW } from '../../lib/island/orientation'
 import { islandAnchors } from '../../lib/island/anchors'
@@ -117,7 +118,7 @@ function useHoverLift(targetLift: number) {
 
 function TerracedIslandNode({ goal, onClick, focused, seedOverride, materialKind }: IslandProps & { focused: boolean }) {
   const [hovered, setHovered] = useState(false)
-  const seed = seedOverride ?? hashGoalId(goal.id)
+  const seed = islandLayoutSeed(goal.biome, seedOverride ?? hashGoalId(goal.id))
   const build = useIslandBuild(goal.biome, seed, focused ? 'focus' : 'overview', focused ? 'high' : 'normal')
   const anchors = useMemo(() => (build ? islandAnchors(build.layout) : null), [build])
   // The lift has no purpose on the focused island: the trail renders as a sibling and doesn't lift with it.

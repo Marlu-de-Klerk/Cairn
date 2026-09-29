@@ -16,6 +16,7 @@ import { islandPosition } from '../../lib/archipelago'
 import { CameraRig } from '../archipelago/CameraRig'
 import { isFocusView, parseDevParams } from './devParams'
 import type { DevParams, DevView } from './devParams'
+import { islandLayoutSeed } from '../../lib/island/fixedIslands'
 
 const BIOMES: readonly Goal['biome'][] = ['jungle', 'desert', 'tundra', 'volcano', 'reef', 'highlands']
 const OVERVIEW_ARCHIPELAGO_SEED = 12345
@@ -49,7 +50,7 @@ function useBuildStats(biome: Goal['biome'], params: DevParams, out: RefObject<H
       out.current.dataset.build = ''
       return
     }
-    const build = getIslandBuild(biome, params.seed, 'focus')
+    const build = getIslandBuild(biome, islandLayoutSeed(biome, params.seed), 'focus')
     const { lit, unlit, props } = build.triangles
     out.current.dataset.build = `build ${build.buildMs.toFixed(0)} ms (first build)\nterrain ${lit.toLocaleString('en')} lit + ${unlit.toLocaleString('en')} unlit\nprops ${props.toLocaleString('en')}`
     releaseIslandBuild(build)
@@ -91,7 +92,7 @@ export function DevIslandView() {
                 <Island goal={goal} onClick={() => undefined} seedOverride={params.seed} materialKind={params.material} focused />
                 {isTerraced(biome) ? (
                   <group rotation={[0, ISLAND_YAW, 0]}>
-                    <TrailView goal={goal} layout={getIslandLayout(biome, params.seed)} milestones={milestones} entries={entries} />
+                    <TrailView goal={goal} layout={getIslandLayout(biome, islandLayoutSeed(biome, params.seed))} milestones={milestones} entries={entries} />
                   </group>
                 ) : null}
               </>

@@ -12,6 +12,7 @@ import { TundraLandmass } from './models/TundraLandmass'
 import { VolcanoLandmass } from './models/VolcanoLandmass'
 import { ReefLandmass } from './models/ReefLandmass'
 import { HighlandsLandmass } from './models/HighlandsLandmass'
+import { islandLayoutSeed } from '../../lib/island/fixedIslands'
 
 type LandmassComponent = typeof DesertLandmass
 
@@ -77,7 +78,7 @@ export function BiomePicker({ value, onChange }: BiomePickerProps) {
 // prefers-reduced-motion respected throughout, so this gates the rotation
 // rather than running it unconditionally.
 function PreviewIsland({ biome }: { biome: Goal['biome'] }) {
-  const build = useIslandBuild(biome, BIOME_TERRAIN[biome].previewSeed, 'preview', 'normal')
+  const build = useIslandBuild(biome, islandLayoutSeed(biome, BIOME_TERRAIN[biome].previewSeed), 'preview', 'normal')
   return build ? <TerracedIsland build={build} /> : null
 }
 

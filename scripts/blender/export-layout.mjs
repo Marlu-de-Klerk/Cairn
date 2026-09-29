@@ -1,0 +1,15 @@
+// Writes the jungle layout the Blender island is built on (default assets-raw/jungle-layout.json, git-ignored).
+// Usage: npm run island:export [-- <out.json>]
+import { spawnSync } from 'node:child_process'
+import { mkdirSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+
+const out = resolve(process.argv[2] ?? 'assets-raw/jungle-layout.json')
+mkdirSync(dirname(out), { recursive: true })
+const result = spawnSync('npx', ['vitest', 'run', 'scripts/blender/island.export.test.ts', '--project', 'unit'], {
+  stdio: 'inherit',
+  shell: true,
+  env: { ...process.env, ISLAND_EXPORT: out },
+})
+if (result.status === 0) console.log(out)
+process.exit(result.status ?? 1)

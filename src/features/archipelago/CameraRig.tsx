@@ -6,6 +6,7 @@ import type { Goal } from './api'
 import { isTerraced } from '../../lib/island/biomes'
 import { focusPose } from '../../lib/island/anchors'
 import { hashGoalId } from '../../lib/theme'
+import { islandLayoutSeed } from '../../lib/island/fixedIslands'
 import { getIslandLayout } from './terrain/islandCache'
 
 const ORBIT_RADIUS = 30
@@ -181,7 +182,7 @@ export function CameraRig({ focusedGoal, initialAzimuth, seedOverride, devOrbit 
     let desiredPosition: Vector3
     let desiredLookAt: Vector3
     if (focusedGoal && terraced) {
-      const pose = focusPose(getIslandLayout(focusedGoal.biome, seedOverride ?? hashGoalId(focusedGoal.id)), {
+      const pose = focusPose(getIslandLayout(focusedGoal.biome, islandLayoutSeed(focusedGoal.biome, seedOverride ?? hashGoalId(focusedGoal.id))), {
         aspect: size.width / Math.max(1, size.height),
         fovDeg: (camera as PerspectiveCamera).fov,
         insetRightPx: size.width >= PANEL_MIN_VIEWPORT_PX ? PANEL_WIDTH_PX : 0,
