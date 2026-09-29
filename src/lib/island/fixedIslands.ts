@@ -18,6 +18,8 @@ export const HAND_BUILT: Partial<Record<Biome, HandBuiltIsland>> = {
   tundra: { seed: 7, url: '/models/TundraIsland.glb' },
   // seed 15: a wide front lawn for the loch, the crag at the back for the castle
   highlands: { seed: 15, url: '/models/HighlandsIsland.glb' },
+  // seed 39: camp in view, the layout's lava fall down the back from the crater cone
+  volcano: { seed: 39, url: '/models/VolcanoIsland.glb' },
 }
 
 /** Biomes that render a hand-built model instead of the procedural terrain and props. */

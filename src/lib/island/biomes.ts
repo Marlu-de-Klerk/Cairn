@@ -142,6 +142,12 @@ export const BIOME_TERRAIN: Record<Biome, BiomeTerrainConfig> = {
   },
   volcano: {
     ...JUNGLE_TERRAIN,
+    // Concentric steps (the walkable part of the cone); the crater cone itself is scenery in volcano_island.py.
+    tiers: [
+      { y: 1.1, radiusRatio: 0.72, drift: 0.15, ledge: { back: 0.3, front: 0.9 }, harmonicAmp: 0.07 },
+      { y: 2.1, radiusRatio: 0.62, drift: 0.1, ledge: { back: 0.28, front: 0.8 }, harmonicAmp: 0.07 },
+    ],
+    features: { shelf: JUNGLE_TERRAIN.features.shelf, fall: 'lava', pool: 'ember', cave: false, pillars: 3, vines: 0, waterRocks: 6, camp: true },
     props: stubProps('ashTree', 'fernRosette'),
     palette: palette(
       {
@@ -237,8 +243,9 @@ export const BIOME_TERRAIN: Record<Biome, BiomeTerrainConfig> = {
   },
 }
 
-export function isTerraced(biome: Biome): boolean {
-  return biome !== 'volcano'
+/** Every biome now renders a hand-built terraced island; kept so the remaining legacy branches read clearly until they are removed. */
+export function isTerraced(_biome: Biome): boolean {
+  return true
 }
 
 export function propRule(biome: Biome, kind: PropKind): PropRule | undefined {
