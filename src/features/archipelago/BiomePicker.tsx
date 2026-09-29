@@ -3,22 +3,19 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { View } from '@react-three/drei'
 import type { Group } from 'three'
 import type { Goal } from './api'
-import { BIOME_TERRAIN, isTerraced } from '../../lib/island/biomes'
+import { BIOME_TERRAIN } from '../../lib/island/biomes'
 import { useIslandBuild } from './terrain/islandCache'
 import { TerracedIsland } from './TerracedIsland'
 import { HullRegistryProvider } from './hullRegistry'
-import { VolcanoLandmass } from './models/VolcanoLandmass'
 import { islandLayoutSeed } from '../../lib/island/fixedIslands'
 
-type LandmassComponent = typeof VolcanoLandmass
-
-const BIOMES: { key: Goal['biome']; label: string; Landmass: LandmassComponent | null }[] = [
-  { key: 'jungle', label: 'Jungle', Landmass: null },
-  { key: 'desert', label: 'Desert', Landmass: null },
-  { key: 'tundra', label: 'Tundra', Landmass: null },
-  { key: 'volcano', label: 'Volcano', Landmass: VolcanoLandmass },
-  { key: 'reef', label: 'Reef', Landmass: null },
-  { key: 'highlands', label: 'Highlands', Landmass: null },
+const BIOMES: { key: Goal['biome']; label: string }[] = [
+  { key: 'jungle', label: 'Jungle' },
+  { key: 'desert', label: 'Desert' },
+  { key: 'tundra', label: 'Tundra' },
+  { key: 'volcano', label: 'Volcano' },
+  { key: 'reef', label: 'Reef' },
+  { key: 'highlands', label: 'Highlands' },
 ]
 
 interface BiomePickerProps {
@@ -29,7 +26,7 @@ interface BiomePickerProps {
 export function BiomePicker({ value, onChange }: BiomePickerProps) {
   return (
     <div className="relative grid grid-cols-2 gap-3 sm:grid-cols-3">
-      {BIOMES.map(({ key, label, Landmass }) => {
+      {BIOMES.map(({ key, label }) => {
         return (
           <button
             key={key}
@@ -48,7 +45,7 @@ export function BiomePicker({ value, onChange }: BiomePickerProps) {
             <View className="h-full w-full">
               <hemisphereLight args={['#EAF6F6', '#6BC2C9', 0.7]} />
               <directionalLight position={[-4, 16, 11]} intensity={1.15} />
-              <RotatingLandmass biome={key} Landmass={Landmass} />
+              <RotatingIsland biome={key} />
             </View>
             <span className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 rounded bg-ink/70 px-2 py-0.5 font-body text-xs text-mist">
               {label}
@@ -78,7 +75,7 @@ function PreviewIsland({ biome }: { biome: Goal['biome'] }) {
   return build ? <TerracedIsland build={build} /> : null
 }
 
-function RotatingLandmass({ biome, Landmass }: { biome: Goal['biome']; Landmass: LandmassComponent | null }) {
+function RotatingIsland({ biome }: { biome: Goal['biome'] }) {
   const ref = useRef<Group>(null)
   const reducedMotion =
     typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -88,14 +85,10 @@ function RotatingLandmass({ biome, Landmass }: { biome: Goal['biome']; Landmass:
   // A fixed, pleasing angle when motion is reduced — still a live 3D preview,
   // just not spinning.
   return (
-    <group ref={ref} rotation={[0, reducedMotion ? Math.PI / 4 : 0, 0]} scale={isTerraced(biome) ? 0.36 : 0.6}>
-      {isTerraced(biome) || !Landmass ? (
-        <HullRegistryProvider>
-          <PreviewIsland biome={biome} />
-        </HullRegistryProvider>
-      ) : (
-        <Landmass />
-      )}
+    <group ref={ref} rotation={[0, reducedMotion ? Math.PI / 4 : 0, 0]} scale={0.36}>
+      <HullRegistryProvider>
+        <PreviewIsland biome={biome} />
+      </HullRegistryProvider>
     </group>
   )
 }

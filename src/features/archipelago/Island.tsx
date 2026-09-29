@@ -6,34 +6,12 @@ import type { Group, Object3D } from 'three'
 import type { Goal } from './api'
 import { getBiomePalette, hashGoalId } from '../../lib/theme'
 import { islandLayoutSeed } from '../../lib/island/fixedIslands'
-import { isTerraced } from '../../lib/island/biomes'
 import { ISLAND_YAW } from '../../lib/island/orientation'
 import { islandAnchors } from '../../lib/island/anchors'
 import { useIslandBuild } from './terrain/islandCache'
 import type { LitMaterialKind } from './terrain/materials'
 import { TerracedIsland } from './TerracedIsland'
 import { useHullRegistry } from './hullRegistry'
-import { VolcanoLandmass } from './models/VolcanoLandmass'
-import { VolcanoProps } from './models/VolcanoProps'
-
-type LegacyBiome = Exclude<Goal['biome'], 'jungle' | 'desert' | 'reef' | 'tundra' | 'highlands'>
-
-const LANDMASS_COMPONENTS: Record<LegacyBiome, typeof VolcanoLandmass> = {
-  volcano: VolcanoLandmass,
-}
-
-const PROPS_COMPONENTS: Record<LegacyBiome, typeof VolcanoProps> = {
-  volcano: VolcanoProps,
-}
-
-const PROP_COUNT_BY_BIOME: Record<LegacyBiome, number> = { volcano: 4 }
-
-// Legacy GLTF biomes only (retired in the next plan): their Kenney platforms are authored at 0.447 half-width, so
-// 4.4x restores a ~1.97 footprint, with the label, hover card and hover lift tuned to that 0.365-tall platform.
-const LEGACY_SCALE = 4.4
-const LEGACY_HOVER_LIFT = 0.073
-const LEGACY_LABEL_Y = 0.5
-const LEGACY_CARD_Y = 0.7
 
 interface IslandProps {
   goal: Goal
@@ -133,35 +111,6 @@ function TerracedIslandNode({ goal, onClick, focused, seedOverride, materialKind
   )
 }
 
-function LegacyIslandNode({ goal, onClick, focused, seedOverride }: IslandProps & { focused: boolean }) {
-  const [hovered, setHovered] = useState(false)
-  const biome = goal.biome as LegacyBiome
-  const liftRef = useHoverLift(hovered && !focused ? LEGACY_HOVER_LIFT : 0)
-  const Landmass = LANDMASS_COMPONENTS[biome]
-  const Props = PROPS_COMPONENTS[biome]
-  return (
-    <group position={[goal.islandX, 0, goal.islandZ]} rotation={[0, goal.islandRotation, 0]}>
-      <group ref={liftRef}>
-        <group scale={LEGACY_SCALE}>
-          <Landmass
-            onClick={(event) => {
-              event.stopPropagation()
-              onClick()
-            }}
-            onPointerOver={(event) => {
-              event.stopPropagation()
-              setHovered(true)
-            }}
-            onPointerOut={() => setHovered(false)}
-          />
-          <Props seed={seedOverride ?? hashGoalId(goal.id)} count={PROP_COUNT_BY_BIOME[biome]} />
-        </group>
-      </group>
-      <Labels goal={goal} labelY={LEGACY_LABEL_Y} cardY={LEGACY_CARD_Y} hovered={hovered} occlude />
-    </group>
-  )
-}
-
 export function Island({ focused = false, ...props }: IslandProps) {
-  return isTerraced(props.goal.biome) ? <TerracedIslandNode {...props} focused={focused} /> : <LegacyIslandNode {...props} focused={focused} />
+  return <TerracedIslandNode {...props} focused={focused} />
 }

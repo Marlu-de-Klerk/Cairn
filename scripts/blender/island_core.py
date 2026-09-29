@@ -221,13 +221,13 @@ def cliff_offset(level, seed):
     return off
 
 
-def build_terrain(cliff=cliff_offset, rings=14):
+def build_terrain(cliff=cliff_offset, rings=14, step=2):
     solids = [
         prism(outline(BEACH), FLOOR, LEVEL_Y[BEACH], name='beach'),
         prism(outline(LAWN), FLOOR + 0.05, LEVEL_Y[LAWN], name='lawn'),
     ]
     for level, seed in ((TIER, 3.1), (SUMMIT, 7.7)):
-        pts = outline(level, step=2)
+        pts = outline(level, step=step)
         lo = LEVEL_Y[level - 1] - 0.08
         solids.append(prism(pts, lo, LEVEL_Y[level], rings=rings, offset=cliff(level, seed), name=f'level{level}'))
     terrain = solids[0]
@@ -903,7 +903,7 @@ def bake_attribute(ob, kind, name, samples):
     return [tuple(d.color) for d in me.color_attributes[name].data]
 
 
-def bake_lighting(ob, strength=1.0):
+def bake_lighting(ob, strength=1.0, sun_angle=4.0):
     """Bakes ambient occlusion and the sun's cast shadows into the vertex colours, so the island keeps soft contact
     shading and tree shadows under the app's single toon material."""
     scene = bpy.context.scene
@@ -919,7 +919,7 @@ def bake_lighting(ob, strength=1.0):
     bpy.context.view_layer.objects.active = ob
     ao = bake_attribute(ob, 'AO', 'AO', 48)
     sun = bpy.data.lights.new('sun', 'SUN')
-    sun.angle = math.radians(4)
+    sun.angle = math.radians(sun_angle)  # wider = softer shadow edges
     sun_ob = bpy.data.objects.new('sun', sun)
     scene.collection.objects.link(sun_ob)
     sun_ob.rotation_euler = sun_local_blender().to_track_quat('Z', 'Y').to_euler()
@@ -939,7 +939,7 @@ def bake_lighting(ob, strength=1.0):
     bpy.data.objects.remove(sun_ob)
 
 
-def finish(terrain, sink, unlit_sink):
+def finish(terrain, sink, unlit_sink, sun_angle=4.0):
     """Joins everything into the Lit, Soft and Unlit meshes, bakes their lighting and exports OUT."""
     soft = to_object(sink.soft, 'Soft')
     lit = [terrain, to_object(sink.bm, 'props')]
@@ -954,9 +954,9 @@ def finish(terrain, sink, unlit_sink):
         group[0].data.name = name
         for o in bpy.context.selected_objects:
             o.select_set(False)
-    bake_lighting(bpy.data.objects['Lit'])
+    bake_lighting(bpy.data.objects['Lit'], sun_angle=sun_angle)
     if soft.data.polygons:
-        bake_lighting(soft, strength=0.6)
+        bake_lighting(soft, strength=0.6, sun_angle=sun_angle)
     for ob in bpy.data.objects:
         ob.data.color_attributes.active_color = ob.data.color_attributes['Col']
     bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', export_vertex_color='ACTIVE', export_materials='NONE', export_yup=True)
