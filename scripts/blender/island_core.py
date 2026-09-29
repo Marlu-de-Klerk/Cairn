@@ -410,12 +410,30 @@ def colour_terrain(terrain, cap, lip, cliff):
                 k = lip(x, y, z, n1, n2)
             else:
                 level = TIER if y < LEVEL_Y[TIER] + 0.01 else SUMMIT
-                top, bottom = LEVEL_Y[level], LEVEL_Y[level - 1]
-                k = cliff(level, (y - bottom) / (top - bottom), n1, n2, x, y, z)
+                k = ('cliff', level)  # coloured per corner below, so shades blend across the wall instead of blocking
         for loop in f.loops:
-            loop[layer] = k if k is not None else cap(loop.vert.co)
+            if k is None:
+                loop[layer] = cap(loop.vert.co)
+            elif k[0] == 'cliff':  # the per-corner marker set above (colours are 4-tuples of floats)
+                co = loop.vert.co
+                vx, vy, vz = co.x, co.z, -co.y
+                level = k[1]
+                top, bottom = LEVEL_Y[level], LEVEL_Y[level - 1]
+                h = max(0.0, min(1.0, (vy - bottom) / (top - bottom)))
+                v1 = noise.noise(Vector((vx * 2.1, vz * 2.1, 0.5)))
+                v2 = noise.noise(Vector((vx * 6.3, vz * 6.3, 1.7)))
+                loop[layer] = cliff(level, h, v1, v2, vx, vy, vz)
+            else:
+                loop[layer] = k
     bm.to_mesh(terrain.data)
     bm.free()
+
+
+def smooth_shade(ob, angle=40):
+    """Smooth normals across the rounded walls, but keep a crisp edge where a wall meets a terrace top."""
+    for poly in ob.data.polygons:
+        poly.use_smooth = True
+    ob.data.set_sharp_from_angle(angle=math.radians(angle))
 
 
 # ---------------------------------------------------------------------------------------------------------- water

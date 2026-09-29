@@ -49,7 +49,7 @@ def reef_offset(level, seed):
         lumps = noise.noise(Vector((math.cos(a) * 4 - seed, math.sin(a) * 4, h * 1.5)))
         d = 0.012 * pits + 0.03 * lumps + 0.012 * math.sin(h * 3 * math.pi * 2 + seed)
         d -= 0.045 * math.exp(-((h - 0.2) / 0.12) ** 2)  # wave-cut notch
-        d += 0.06 * max(0.0, 1 - h * 6) ** 2  # apron of fallen blocks at the foot
+        d += 0.05 * max(0.0, 1 - h * 6)  # apron at the foot; linear, so it meets the ground at an angle
         if h > 0.9:
             d = 0.018  # rounded rim standing proud
         return d
@@ -503,11 +503,12 @@ KINDS = [
 
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    terrain = build_terrain(reef_offset, rings=14)
+    terrain = build_terrain(reef_offset, rings=18, step=1)
     carve_path(terrain)
     carve_caves(terrain)
     tessellate_tops(terrain, target=0.16)
     colour_terrain(terrain, reef_cap, reef_lip, reef_cliff)
+    smooth_shade(terrain)
     ground = Ground(terrain)
     sink, unlit_sink = Sink(), Sink()
     keep_out = landmark_keep_out()
@@ -520,7 +521,7 @@ def main():
     beach_details(ground, sink)
     rim_fringe(ground, sink, beach_grass)
     scatter(ground, sink, unlit_sink, KINDS, keep_out)
-    finish(terrain, sink, unlit_sink)
+    finish(terrain, sink, unlit_sink, sun_angle=12)
 
 
 main()

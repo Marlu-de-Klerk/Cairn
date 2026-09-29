@@ -90,10 +90,6 @@ def vo_cliff(level, h, n1, n2, x, y, z):
     return mix(k, col(VO['ashDark']), smooth((h - 0.88) / 0.06) * 0.6)
 
 
-def smooth_shade(ob, angle=40):
-    for poly in ob.data.polygons:
-        poly.use_smooth = True
-    ob.data.set_sharp_from_angle(angle=math.radians(angle))
 
 
 # ---------------------------------------------------------------------------------------------------------- props
