@@ -83,6 +83,8 @@ above — see §3's mapping):
 
 ## 3. Island composition system
 
+> **Superseded by `2026-09-23-cairn-terraced-islands-design.md`** (the composition recipe here, and the prop/marker parts of §4). §1, §2, §5 and §4's procedural-geometry principle still apply.
+
 Every island is built from the same three-part recipe, parametrized per
 biome — this is also what fixes the water-alignment bug structurally
 (see below), because the shoreline ring's size is derived from the same
@@ -120,6 +122,8 @@ numbers that build the island, not two independently-tuned constants.
 | Highlands | Reef Garden | Slate rock + heather tufts instead of coral |
 
 ## 4. Technical approach — procedural geometry, not sourced assets
+
+> **Superseded by `2026-09-23-cairn-terraced-islands-design.md`** (the composition recipe here, and the prop/marker parts of §4). §1, §2, §5 and §4's procedural-geometry principle still apply.
 
 M4's asset-hunting approach (downloading CC0 packs, processing through
 `gltf-transform`/`gltfjsx`) is **retired for biome art**. Rationale,

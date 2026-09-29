@@ -1,7 +1,13 @@
 import { useEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Vector3 } from 'three'
+import type { PerspectiveCamera } from 'three'
 import type { Goal } from './api'
+import { isTerraced } from '../../lib/island/biomes'
+import { focusPose } from '../../lib/island/anchors'
+import { hashGoalId } from '../../lib/theme'
+import { islandLayoutSeed } from '../../lib/island/fixedIslands'
+import { getIslandLayout } from './terrain/islandCache'
 
 const ORBIT_RADIUS = 30
 const ORBIT_ELEVATION = (35 * Math.PI) / 180 // spec §6.1: "looking down at maybe 35°"
@@ -15,6 +21,8 @@ const ISLAND_APPROACH_DISTANCE = 7.88
 const ISLAND_APPROACH_ELEVATION = (40 * Math.PI) / 180
 const FLY_DURATION = 1.2 // seconds, spec §6.3
 const DRAG_CLICK_THRESHOLD = 5 // px of travel past which a gesture is a drag, not a click
+const PANEL_WIDTH_PX = 288 // RoadmapPanel's w-72
+const PANEL_MIN_VIEWPORT_PX = 640
 
 function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3)
@@ -45,11 +53,19 @@ interface CameraRigProps {
   // "auto-rotating slowly" (spec §6.1) can leave a viewer staring at empty
   // water for 20+ seconds before anything rotates into frame.
   initialAzimuth?: number
+  /** DEV harness only: the island seed, when it isn't derived from the goal id. */
+  seedOverride?: number
+  /** DEV harness only: a fixed focus orbit angle; disables drag-to-orbit. */
+  devOrbit?: number
 }
 
-export function CameraRig({ focusedGoal, initialAzimuth }: CameraRigProps) {
-  const { camera, gl } = useThree()
+export function CameraRig({ focusedGoal, initialAzimuth, seedOverride, devOrbit }: CameraRigProps) {
+  const { camera, gl, size, invalidate } = useThree()
   const azimuth = useRef(0)
+  // Spec §5.6.1: the focus orbit is separate from the overview azimuth, so orbiting an island never moves where the
+  // overview returns to.
+  const orbit = useRef(0)
+  const orbitEnabled = useRef(false)
   const azimuthInitialized = useRef(false)
   const hasInteracted = useRef(false)
   const isDragging = useRef(false)
@@ -84,7 +100,12 @@ export function CameraRig({ focusedGoal, initialAzimuth }: CameraRigProps) {
     const handlePointerMove = (event: PointerEvent) => {
       if (!isDragging.current) return
       const deltaX = event.clientX - lastPointerX.current
-      azimuth.current -= deltaX * DRAG_SENSITIVITY
+      if (orbitEnabled.current) {
+        orbit.current -= deltaX * DRAG_SENSITIVITY
+        invalidate()
+      } else {
+        azimuth.current -= deltaX * DRAG_SENSITIVITY
+      }
       lastPointerX.current = event.clientX
       // Net displacement from the press origin, not accumulated per-move travel —
       // jitter that wobbles back and forth during a still tap must not sum past
@@ -120,7 +141,7 @@ export function CameraRig({ focusedGoal, initialAzimuth }: CameraRigProps) {
       window.removeEventListener('pointerup', handlePointerUp)
       window.removeEventListener('click', handleClickCapture, true)
     }
-  }, [gl])
+  }, [gl, invalidate])
 
   // `initialAzimuth` arrives once goals have loaded (it's undefined on the
   // very first render, before the archipelago query resolves) — apply it
@@ -135,6 +156,7 @@ export function CameraRig({ focusedGoal, initialAzimuth }: CameraRigProps) {
 
   useFrame((_, delta) => {
     const focusedGoalId = focusedGoal?.id ?? null
+    const terraced = focusedGoal !== null && isTerraced(focusedGoal.biome)
 
     // A transition begins the instant the focused goal's identity changes —
     // capture wherever the camera ACTUALLY is right now as the flight's
@@ -144,9 +166,11 @@ export function CameraRig({ focusedGoal, initialAzimuth }: CameraRigProps) {
       transitionStart.current = camera.position.clone()
       transitionStartLookAt.current = currentLookAt.current.clone()
       transitionElapsed.current = 0
+      orbit.current = 0
     }
 
     const isTransitioning = transitionStart.current !== null
+    orbitEnabled.current = terraced && !isTransitioning && devOrbit === undefined
 
     // Auto-rotate only ever runs before the first interaction, ever — once
     // `hasInteracted` flips true (on the very first pointerdown, at the same
@@ -155,10 +179,30 @@ export function CameraRig({ focusedGoal, initialAzimuth }: CameraRigProps) {
       azimuth.current += delta * ORBIT_SPEED
     }
 
-    const desiredPosition = focusedGoal ? islandApproachPosition(focusedGoal) : orbitPosition(azimuth.current)
-    const desiredLookAt = focusedGoal ? new Vector3(focusedGoal.islandX, 0, focusedGoal.islandZ) : new Vector3(0, 0, 0)
+    let desiredPosition: Vector3
+    let desiredLookAt: Vector3
+    if (focusedGoal && terraced) {
+      const pose = focusPose(getIslandLayout(focusedGoal.biome, islandLayoutSeed(focusedGoal.biome, seedOverride ?? hashGoalId(focusedGoal.id))), {
+        aspect: size.width / Math.max(1, size.height),
+        fovDeg: (camera as PerspectiveCamera).fov,
+        insetRightPx: size.width >= PANEL_MIN_VIEWPORT_PX ? PANEL_WIDTH_PX : 0,
+        viewportPx: size,
+        orbit: devOrbit ?? orbit.current,
+      })
+      const island = new Vector3(focusedGoal.islandX, 0, focusedGoal.islandZ)
+      desiredPosition = island.clone().add(new Vector3(...pose.position))
+      desiredLookAt = island.add(new Vector3(...pose.lookAt))
+    } else if (focusedGoal) {
+      desiredPosition = islandApproachPosition(focusedGoal)
+      desiredLookAt = new Vector3(focusedGoal.islandX, 0, focusedGoal.islandZ)
+    } else {
+      desiredPosition = orbitPosition(azimuth.current)
+      desiredLookAt = new Vector3(0, 0, 0)
+    }
 
     if (isTransitioning) {
+      // Under the focused view's demand frameloop, the flight has to request its own next frame.
+      invalidate()
       transitionElapsed.current += delta
       const rawT = Math.min(1, transitionElapsed.current / FLY_DURATION)
       const t = easeOutCubic(rawT)

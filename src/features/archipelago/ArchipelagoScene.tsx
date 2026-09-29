@@ -2,9 +2,12 @@ import { Canvas } from '@react-three/fiber'
 import { useMatch, useNavigate } from 'react-router'
 import { useGoals } from './api'
 import { Island } from './Island'
-import { Water } from './Water'
+import { SceneEnvironment } from './SceneEnvironment'
+import { HullRegistryProvider } from './hullRegistry'
 import { CameraRig } from './CameraRig'
 import { RoadmapTrail } from '../roadmap/RoadmapTrail'
+import { isTerraced } from '../../lib/island/biomes'
+import { ISLAND_YAW } from '../../lib/island/orientation'
 
 interface ArchipelagoSceneProps {
   showCompleted: boolean
@@ -35,10 +38,17 @@ export function ArchipelagoScene({ showCompleted }: ArchipelagoSceneProps) {
 
   return (
     <div className="fixed inset-0 -z-10">
-      <Canvas camera={{ fov: 50 }}>
-        <ambientLight intensity={0.6} />
-        <directionalLight position={[10, 20, 10]} intensity={1} />
-        <Water />
+      {/* A focused terraced island redraws only on demand: every animator there (camera flight, orbit drag, trail
+          springs, cairn pulse, hover lift) calls invalidate(). Legacy biomes and the overview's auto-rotate still
+          animate every frame. touch-action: none keeps a one-finger orbit drag from scrolling the page. */}
+      <Canvas
+        camera={{ fov: 50 }}
+        flat
+        frameloop={focusedGoal && isTerraced(focusedGoal.biome) ? 'demand' : 'always'}
+        style={{ touchAction: 'none' }}
+      >
+        <SceneEnvironment />
+        <HullRegistryProvider>
         {visibleGoals.map((goal) => (
           <Island
             key={goal.id}
@@ -48,10 +58,11 @@ export function ArchipelagoScene({ showCompleted }: ArchipelagoSceneProps) {
           />
         ))}
         {focusedGoal ? (
-          <group position={[focusedGoal.islandX, 0, focusedGoal.islandZ]} rotation={[0, focusedGoal.islandRotation, 0]}>
+          <group position={[focusedGoal.islandX, 0, focusedGoal.islandZ]} rotation={[0, isTerraced(focusedGoal.biome) ? ISLAND_YAW : focusedGoal.islandRotation, 0]}>
             <RoadmapTrail key={focusedGoal.id} goal={focusedGoal} />
           </group>
         ) : null}
+        </HullRegistryProvider>
         <CameraRig focusedGoal={focusedGoal} initialAzimuth={initialAzimuth} />
       </Canvas>
     </div>

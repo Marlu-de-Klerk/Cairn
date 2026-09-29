@@ -1,18 +1,14 @@
 import { Canvas } from '@react-three/fiber'
 import { useMemo } from 'react'
-import { buildTrailCurve, positionAt } from '../roadmap/curve'
-import { BASE_TOKENS } from '../../lib/theme'
+import { buildTrailCurve, buildTrailRibbon, positionAt } from '../roadmap/curve'
+import { BIOME_TERRAIN, SHARED_PALETTE } from '../../lib/island/biomes'
+import { ISLAND_YAW } from '../../lib/island/orientation'
+import { getIslandLayout } from './terrain/islandCache'
 import type { Goal } from './api'
+import { islandLayoutSeed } from '../../lib/island/fixedIslands'
 
 const MAX_MILESTONES = 8
 
-// Arbitrary preview-only radius/height/seed — this canvas never renders the
-// real island, so it doesn't need to match Island.tsx's real landmass footprint
-// the way RoadmapTrail's curve does; it only needs a stable, pleasant-looking
-// spiral to preview even spacing against.
-const PREVIEW_BASE_RADIUS = 2
-const PREVIEW_HEIGHT = 1.5
-const PREVIEW_SEED = 0
 
 export interface MilestoneRow {
   title: string
@@ -87,7 +83,9 @@ export function MilestoneBuilder({ kind, milestones, errors, onChange }: Milesto
  * invariant (CLAUDE.md) — never proportional to each milestone's value.
  */
 function TrailPreview({ count }: { count: number }) {
-  const curve = useMemo(() => buildTrailCurve(PREVIEW_BASE_RADIUS, PREVIEW_HEIGHT, PREVIEW_SEED), [])
+  const layout = useMemo(() => getIslandLayout('jungle', islandLayoutSeed('jungle', BIOME_TERRAIN.jungle.previewSeed)), [])
+  const curve = useMemo(() => buildTrailCurve(layout.trail.waypoints), [layout])
+  const ribbon = useMemo(() => buildTrailRibbon(curve, layout, 0, 1, 0.05), [curve, layout])
   const dots = useMemo(
     () => Array.from({ length: count }, (_, i) => positionAt(curve, (i + 1) / (count + 1))),
     [curve, count],
@@ -95,15 +93,18 @@ function TrailPreview({ count }: { count: number }) {
 
   return (
     <div className="h-28 overflow-hidden rounded-md border border-stone-light bg-ink">
-      <Canvas camera={{ position: [3, 2, 3], fov: 40 }} frameloop="demand">
-        <ambientLight intensity={0.8} />
-        <directionalLight position={[3, 5, 2]} />
-        {dots.map((p, i) => (
-          <mesh key={i} position={[p.x, p.y, p.z]}>
-            <sphereGeometry args={[0.08, 12, 12]} />
-            <meshStandardMaterial color={BASE_TOKENS.lantern} />
+      <Canvas camera={{ position: [5.2, 4.4, 5.2], fov: 40 }} frameloop="demand" flat onCreated={({ camera }) => camera.lookAt(0, 0.9, 0)}>
+        <group rotation={[0, ISLAND_YAW, 0]}>
+          <mesh geometry={ribbon}>
+            <meshBasicMaterial color={SHARED_PALETTE.trailDone} transparent opacity={0.3} depthWrite={false} />
           </mesh>
-        ))}
+          {dots.map((p, i) => (
+            <mesh key={i} position={[p.x, p.y, p.z]}>
+              <sphereGeometry args={[0.08, 12, 12]} />
+              <meshBasicMaterial color={SHARED_PALETTE.cairnNext} />
+            </mesh>
+          ))}
+        </group>
       </Canvas>
     </div>
   )

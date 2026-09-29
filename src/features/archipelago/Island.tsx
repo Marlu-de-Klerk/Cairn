@@ -1,15 +1,22 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import type { RefObject } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
-import type { Group } from 'three'
+import type { Group, Object3D } from 'three'
 import type { Goal } from './api'
 import { getBiomePalette, hashGoalId } from '../../lib/theme'
+import { islandLayoutSeed } from '../../lib/island/fixedIslands'
+import { isTerraced } from '../../lib/island/biomes'
+import { ISLAND_YAW } from '../../lib/island/orientation'
+import { islandAnchors } from '../../lib/island/anchors'
+import { useIslandBuild } from './terrain/islandCache'
+import type { LitMaterialKind } from './terrain/materials'
+import { TerracedIsland } from './TerracedIsland'
+import { useHullRegistry } from './hullRegistry'
 import { DesertLandmass } from './models/DesertLandmass'
 import { DesertProps } from './models/DesertProps'
 import { HighlandsLandmass } from './models/HighlandsLandmass'
 import { HighlandsProps } from './models/HighlandsProps'
-import { JungleLandmass } from './models/JungleLandmass'
-import { JungleProps } from './models/JungleProps'
 import { ReefLandmass } from './models/ReefLandmass'
 import { ReefProps } from './models/ReefProps'
 import { TundraLandmass } from './models/TundraLandmass'
@@ -17,8 +24,9 @@ import { TundraProps } from './models/TundraProps'
 import { VolcanoLandmass } from './models/VolcanoLandmass'
 import { VolcanoProps } from './models/VolcanoProps'
 
-const LANDMASS_COMPONENTS: Record<Goal['biome'], typeof JungleLandmass> = {
-  jungle: JungleLandmass,
+type LegacyBiome = Exclude<Goal['biome'], 'jungle'>
+
+const LANDMASS_COMPONENTS: Record<LegacyBiome, typeof DesertLandmass> = {
   desert: DesertLandmass,
   tundra: TundraLandmass,
   volcano: VolcanoLandmass,
@@ -26,8 +34,7 @@ const LANDMASS_COMPONENTS: Record<Goal['biome'], typeof JungleLandmass> = {
   highlands: HighlandsLandmass,
 }
 
-const PROPS_COMPONENTS: Record<Goal['biome'], typeof JungleProps> = {
-  jungle: JungleProps,
+const PROPS_COMPONENTS: Record<LegacyBiome, typeof DesertProps> = {
   desert: DesertProps,
   tundra: TundraProps,
   volcano: VolcanoProps,
@@ -35,19 +42,23 @@ const PROPS_COMPONENTS: Record<Goal['biome'], typeof JungleProps> = {
   highlands: HighlandsProps,
 }
 
-const PROP_COUNT_BY_BIOME: Record<Goal['biome'], number> = {
-  jungle: 14,
-  desert: 6,
-  tundra: 5,
-  volcano: 4,
-  reef: 8,
-  highlands: 7,
-}
+const PROP_COUNT_BY_BIOME: Record<LegacyBiome, number> = { desert: 6, tundra: 5, volcano: 4, reef: 8, highlands: 7 }
+
+// Legacy GLTF biomes only (retired in the next plan): their Kenney platforms are authored at 0.447 half-width, so
+// 4.4x restores a ~1.97 footprint, with the label, hover card and hover lift tuned to that 0.365-tall platform.
+const LEGACY_SCALE = 4.4
+const LEGACY_HOVER_LIFT = 0.073
+const LEGACY_LABEL_Y = 0.5
+const LEGACY_CARD_Y = 0.7
 
 interface IslandProps {
   goal: Goal
   onClick: () => void
   focused?: boolean
+  /** DEV harness only: render this seed instead of the one derived from the goal id. */
+  seedOverride?: number
+  /** DEV harness only: toon/Lambert A/B (spec Q3). */
+  materialKind?: LitMaterialKind
 }
 
 // Palette colors are three.js hex numbers (see lib/theme.ts); the <Html> label/card
@@ -56,112 +67,20 @@ function hexToCssColor(hex: number): string {
   return `#${hex.toString(16).padStart(6, '0')}`
 }
 
-// Kenney's real platform meshes (Task 5) come in at a tiny native scale. Five of
-// the six biomes' landmass are a ~0.9x0.72x0.083-unit sliver at their raw inner
-// group scale of 0.447 (see *Landmass.tsx). This uniform group-level scale restores
-// the footprint the rest of the scene was originally tuned against, back when
-// Island.tsx rendered a placeholder `coneGeometry args={[2, 1.5, 8]}`: 4.4 * 0.447
-// half-width is about 1.97 (about the old cone's radius 2), and 4.4 * 0.083 height
-// is about 0.365 for the five flat-platform biomes. If this number ever changes,
-// RoadmapTrail.tsx's ISLAND_BASE_RADIUS/ISLAND_HEIGHT, scatter.ts's
-// RADIUS_MIN/RADIUS_MAX, the hover-lift target below, the <Html> y-offsets below,
-// and CameraRig.tsx's ISLAND_APPROACH_DISTANCE all need to be recomputed from it
-// too. None of them import this constant; each one hardcodes its own
-// already-derived value, matching this file's pre-existing convention of
-// hardcoded numbers tied to the geometry.
-//
-// Jungle is the first biome migrated to procedural geometry (2026-09-15 visual
-// redesign, see the spec) — it's authored directly in real, world-ready units
-// inside JungleLandmass.tsx/JungleProps.tsx, so it renders unscaled. The other
-// five stay on the GLTF-era 4.4x multiplier until they're migrated too.
-const ISLAND_SCALE_BY_BIOME: Record<Goal['biome'], number> = {
-  jungle: 1,
-  desert: 4.4,
-  tundra: 4.4,
-  volcano: 4.4,
-  reef: 4.4,
-  highlands: 4.4,
+function progressLabelFor(goal: Goal): string {
+  if (goal.kind === 'numeric') {
+    const unit = goal.unit ? ` ${goal.unit}` : ''
+    return `${goal.currentValue}${unit} / ${goal.targetValue ?? '?'}${unit}`
+  }
+  return goal.status === 'completed' ? 'Complete' : 'In progress'
 }
 
-// 20% of the scaled island's own height, matching the pre-M4 cone's hover-lift
-// ratio (0.3 was 20% of the old cone's 1.5 height). Jungle's own rock rises to
-// roughly 1.97 above the water (see JungleLandmass.tsx's constants) — 20% of
-// that is ~0.39. The other five still use the 0.365-height-derived value.
-const HOVER_LIFT_BY_BIOME: Record<Goal['biome'], number> = {
-  jungle: 0.39,
-  desert: 0.073,
-  tundra: 0.073,
-  volcano: 0.073,
-  reef: 0.073,
-  highlands: 0.073,
-}
-
-// The old label/card y-offsets (2.2, 3) were measured from the old cone's own
-// apex (0.75 above the Island group's origin): label sat 1.45 above the apex,
-// the hover card 2.25 above it. Scaling those two gaps by the new-to-old height
-// ratio (0.365 / 1.5) and adding the new five-biome top surface (0.145, from
-// the comment above) gives label ~0.50 and card ~0.69 for the five untouched
-// biomes. Jungle's rock top sits at roughly 1.92 above the water — the same
-// 1.45/2.25 gaps placed above that give jungle's own label/card values below.
-const LABEL_Y_BY_BIOME: Record<Goal['biome'], number> = {
-  jungle: 2.2,
-  desert: 0.5,
-  tundra: 0.5,
-  volcano: 0.5,
-  reef: 0.5,
-  highlands: 0.5,
-}
-const CARD_Y_BY_BIOME: Record<Goal['biome'], number> = {
-  jungle: 2.4,
-  desert: 0.7,
-  tundra: 0.7,
-  volcano: 0.7,
-  reef: 0.7,
-  highlands: 0.7,
-}
-
-export function Island({ goal, onClick, focused = false }: IslandProps) {
-  const meshRef = useRef<Group>(null)
-  const [hovered, setHovered] = useState(false)
-
-  useFrame(() => {
-    if (!meshRef.current) return
-    // The hover lift has no purpose once this is the focused island — RoadmapTrail
-    // renders as a sibling at the same coordinates and doesn't lift with it, so
-    // raising the landmass here would swallow the whole trail inside it.
-    const targetY = hovered && !focused ? HOVER_LIFT_BY_BIOME[goal.biome] : 0
-    meshRef.current.position.y += (targetY - meshRef.current.position.y) * 0.15
-  })
-
-  const progressLabel =
-    goal.kind === 'numeric'
-      ? `${goal.currentValue}${goal.unit ? ` ${goal.unit}` : ''} / ${goal.targetValue ?? '?'}${goal.unit ? ` ${goal.unit}` : ''}`
-      : goal.status === 'completed'
-        ? 'Complete'
-        : 'In progress'
-
-  const Landmass = LANDMASS_COMPONENTS[goal.biome]
-  const Props = PROPS_COMPONENTS[goal.biome]
+function Labels({ goal, labelY, cardY, hovered, occlude }: { goal: Goal; labelY: number; cardY: number; hovered: boolean; occlude: boolean | RefObject<Object3D>[] }) {
   const accentColor = hexToCssColor(getBiomePalette(goal.biome).accent)
-
+  const progressLabel = progressLabelFor(goal)
   return (
-    <group position={[goal.islandX, 0, goal.islandZ]} rotation={[0, goal.islandRotation, 0]}>
-      <group ref={meshRef} scale={ISLAND_SCALE_BY_BIOME[goal.biome]}>
-        <Landmass
-          onClick={(event) => {
-            event.stopPropagation()
-            onClick()
-          }}
-          onPointerOver={(event) => {
-            event.stopPropagation()
-            setHovered(true)
-          }}
-          onPointerOut={() => setHovered(false)}
-        />
-        <Props seed={hashGoalId(goal.id)} count={PROP_COUNT_BY_BIOME[goal.biome]} />
-      </group>
-
-      <Html position={[0, LABEL_Y_BY_BIOME[goal.biome], 0]} center occlude distanceFactor={12} style={{ pointerEvents: 'none' }}>
+    <>
+      <Html position={[0, labelY, 0]} center occlude={occlude} distanceFactor={12} style={{ pointerEvents: 'none' }}>
         <div
           className="whitespace-nowrap rounded-md border-t-2 bg-stone/90 px-2 py-1 text-xs font-body text-mist backdrop-blur-sm"
           style={{ borderTopColor: accentColor }}
@@ -169,9 +88,8 @@ export function Island({ goal, onClick, focused = false }: IslandProps) {
           {goal.title} — {progressLabel}
         </div>
       </Html>
-
       {hovered ? (
-        <Html position={[0, CARD_Y_BY_BIOME[goal.biome], 0]} center occlude distanceFactor={12}>
+        <Html position={[0, cardY, 0]} center occlude={occlude} distanceFactor={12}>
           <div
             className="w-48 rounded-md border border-t-2 border-stone-light bg-stone/90 p-3 text-sm font-body text-mist shadow-lg backdrop-blur-sm"
             style={{ borderTopColor: accentColor }}
@@ -182,6 +100,84 @@ export function Island({ goal, onClick, focused = false }: IslandProps) {
           </div>
         </Html>
       ) : null}
+    </>
+  )
+}
+
+function useHoverLift(targetLift: number) {
+  const ref = useRef<Group>(null)
+  useFrame(({ invalidate }) => {
+    if (!ref.current) return
+    const y = ref.current.position.y
+    const next = y + (targetLift - y) * 0.15
+    ref.current.position.y = Math.abs(targetLift - next) < 1e-4 ? targetLift : next
+    if (ref.current.position.y !== targetLift) invalidate()
+  })
+  return ref
+}
+
+function TerracedIslandNode({ goal, onClick, focused, seedOverride, materialKind }: IslandProps & { focused: boolean }) {
+  const [hovered, setHovered] = useState(false)
+  const seed = islandLayoutSeed(goal.biome, seedOverride ?? hashGoalId(goal.id))
+  const build = useIslandBuild(goal.biome, seed, focused ? 'focus' : 'overview', focused ? 'high' : 'normal')
+  const anchors = useMemo(() => (build ? islandAnchors(build.layout) : null), [build])
+  // The lift has no purpose on the focused island: the trail renders as a sibling and doesn't lift with it.
+  const liftRef = useHoverLift(hovered && !focused && anchors ? anchors.hoverLift : 0)
+  const { hulls } = useHullRegistry()
+  const occluders = useMemo(() => (hulls.current ?? []).map((object) => ({ current: object })), [hulls, build])
+
+  if (!build || !anchors) return null
+  return (
+    <group position={[goal.islandX, 0, goal.islandZ]} rotation={[0, ISLAND_YAW, 0]}>
+      <group ref={liftRef}>
+        <TerracedIsland
+          build={build}
+          materialKind={materialKind}
+          onClick={(event) => {
+            event.stopPropagation()
+            onClick()
+          }}
+          onPointerOver={(event) => {
+            event.stopPropagation()
+            setHovered(true)
+          }}
+          onPointerOut={() => setHovered(false)}
+        />
+      </group>
+      <Labels goal={goal} labelY={anchors.labelY} cardY={anchors.cardY} hovered={hovered} occlude={occluders} />
     </group>
   )
+}
+
+function LegacyIslandNode({ goal, onClick, focused, seedOverride }: IslandProps & { focused: boolean }) {
+  const [hovered, setHovered] = useState(false)
+  const biome = goal.biome as LegacyBiome
+  const liftRef = useHoverLift(hovered && !focused ? LEGACY_HOVER_LIFT : 0)
+  const Landmass = LANDMASS_COMPONENTS[biome]
+  const Props = PROPS_COMPONENTS[biome]
+  return (
+    <group position={[goal.islandX, 0, goal.islandZ]} rotation={[0, goal.islandRotation, 0]}>
+      <group ref={liftRef}>
+        <group scale={LEGACY_SCALE}>
+          <Landmass
+            onClick={(event) => {
+              event.stopPropagation()
+              onClick()
+            }}
+            onPointerOver={(event) => {
+              event.stopPropagation()
+              setHovered(true)
+            }}
+            onPointerOut={() => setHovered(false)}
+          />
+          <Props seed={seedOverride ?? hashGoalId(goal.id)} count={PROP_COUNT_BY_BIOME[biome]} />
+        </group>
+      </group>
+      <Labels goal={goal} labelY={LEGACY_LABEL_Y} cardY={LEGACY_CARD_Y} hovered={hovered} occlude />
+    </group>
+  )
+}
+
+export function Island({ focused = false, ...props }: IslandProps) {
+  return isTerraced(props.goal.biome) ? <TerracedIslandNode {...props} focused={focused} /> : <LegacyIslandNode {...props} focused={focused} />
 }

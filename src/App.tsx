@@ -1,13 +1,17 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { Routes, Route } from 'react-router'
 import { SignInPage } from './features/auth/SignInPage'
 import { AuthCallbackPage } from './features/auth/AuthCallbackPage'
 import { RequireAuth } from './features/auth/RequireAuth'
 import { ArchipelagoScene } from './features/archipelago/ArchipelagoScene'
 import { HomeOverlay } from './features/archipelago/HomeOverlay'
-import { DevIslandPreview } from './features/archipelago/DevIslandPreview'
-import { DevSpikePreview } from './features/archipelago/spikes/DevSpikePreview'
 import { NotFoundPage } from './features/NotFoundPage'
+
+// DEV-only harnesses: lazy so production builds tree-shake them out entirely.
+const DevIslandView = import.meta.env.DEV ? lazy(() => import('./features/dev/DevIslandView').then((m) => ({ default: m.DevIslandView }))) : null
+const DevSpikePreview = import.meta.env.DEV
+  ? lazy(() => import('./features/archipelago/spikes/DevSpikePreview').then((m) => ({ default: m.DevSpikePreview })))
+  : null
 
 export function App() {
   const [showCompleted, setShowCompleted] = useState(true)
@@ -17,8 +21,12 @@ export function App() {
     <Routes>
       <Route path="/sign-in" element={<SignInPage />} />
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
-      <Route path="/dev/island-preview" element={<DevIslandPreview />} />
-      <Route path="/dev/spike/:name" element={<DevSpikePreview />} />
+      {DevIslandView ? (
+        <Route path="/dev/island/:biome" element={<Suspense fallback={null}><DevIslandView /></Suspense>} />
+      ) : null}
+      {DevSpikePreview ? (
+        <Route path="/dev/spike/:name" element={<Suspense fallback={null}><DevSpikePreview /></Suspense>} />
+      ) : null}
       <Route
         path="/*"
         element={

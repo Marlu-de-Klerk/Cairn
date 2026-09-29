@@ -6300,3 +6300,48 @@ git add src/features/roadmap/RoadmapTrail.tsx src/features/roadmap/LegacyRoadmap
 ```
 
 ---
+
+### Task 18: Focus pose, focus orbit and the demand frameloop
+
+*Written and implemented 2026-09-28 (the original plan stopped after Task 17).*
+
+**Files:** Modify `src/features/archipelago/CameraRig.tsx`, `ArchipelagoScene.tsx`, `src/features/dev/devParams.ts`, `devParams.test.ts`, `DevIslandView.tsx`.
+
+- `CameraRig`: a focused terraced goal flies to `focusPose(getIslandLayout(biome, seedOverride ?? hashGoalId(id)), { aspect, fovDeg: camera.fov, insetRightPx: width ≥ 640 ? 288 : 0, viewportPx: size, orbit })` (spec §5.6). Legacy biomes keep the old approach pose. The fly-to easing is unchanged.
+- Focus orbit (spec §5.6.1): its own `orbit` ref, reset to 0 on every focus change; a horizontal drag changes it (same `DRAG_SENSITIVITY`, drag-vs-click threshold and click suppression) only while a terraced goal is focused and no flight is running; each move calls `invalidate()`. The overview `azimuth` is never touched while focused.
+- `ArchipelagoScene`: `frameloop="demand"` while a terraced goal is focused, `always` otherwise (the overview auto-rotate and the legacy trail/models animate without `invalidate()`); `touch-action: none` on the canvas. The camera flight calls `invalidate()` each frame while it runs.
+- Dev harness: views `focus`, `orbit-back` (orbit π) and `phone` render the real `CameraRig` with `devOrbit` (fixed orbit, drag disabled); `orbit=<radians>` overrides.
+
+Verify: `npm run render:island -- jungle 1 focus`, `jungle 1 orbit-back`, `jungle 1 phone`: the whole island in frame, shifted left of the panel on desktop, the back (waterfall side) at orbit π.
+
+### Task 19: Stats overlay, overview/material views, bench and the render matrix
+
+*Written and implemented 2026-09-28.*
+
+**Files:** Modify `src/features/dev/DevIslandView.tsx`, `devParams.ts`, `devParams.test.ts`, `scripts/render-island.mjs`, `package.json`. Create `src/features/archipelago/terrain/island.perf.test.ts`, `scripts/island-bench.mjs`.
+
+- Dev harness: a stats overlay (top-left: `gl.info.render` draw calls and triangles, plus the focused build's first-build ms and terrain/prop triangles), `view=overview&islands=M` (M islands at `islandPosition(i, 12345)`, mixed biomes, camera frozen at the overview pose), `material=toon|lambert`.
+- `npm run bench:island`: Vitest 5 dropped the `bench()` API used by the spec, so this is an env-gated test (`ISLAND_BENCH`, skipped in `npm test`) run through a Node wrapper like `test:island-sweep`; it prints layout/mesh median and p95 per biome over 20 seeds and the worst-case triangle counts. (Vitest hides a passing test's console output, so the test writes a temp file that the wrapper prints.)
+- `npm run render:island -- jungle --matrix`: the §10 matrix in one browser (seeds 1, 2, 3, 7, 42 × focus/hero/side/top/phone; N = 8 at head 1 per seed; orbit-back; overview with 8 islands; toon/Lambert pair).
+
+### Task 20: Jungle sign-off gate
+
+*Prepared 2026-09-28; the gate itself is the user's review.*
+
+Matrix rendered (34 shots, no page errors). Checklist (spec §10), by eye from the headless renders:
+
+1. Whole island reads (beach, lawn, ≥ 2 plateaus, sheer cliffs): **pass**, all five seeds.
+2. Trail visible trailhead → summit, ramps read as climbs: **pass**.
+3. No floating/clipping/hidden trail: **pass** by eye (automated tests cover it too). Cliff-wall cracks found at Task 15 were fixed (per-point wall offsets).
+4. N = 4 cairns on ≥ 3 levels: **pass**.
+5. Cliff flutes, dark base, light rim, slab: **pass**.
+6. Foam rim continuous, flat water: **pass**.
+7. Summit/label/pennant in frame on focus and phone; panel leaves the trailhead clear on desktop: **pass**.
+8. Palette pixel spot-check: **not done** (needs a real GPU screenshot, not SwiftShader).
+9. Overview halos/labels: **fails for reasons outside the jungle**: the five legacy biomes render very dark under the flat canvas + new lights (Task 2), and are much larger than the terraced jungle.
+10. Stats within §8: **fails**:
+    - Focused draw calls 38–40 (budget 22): per-kind prop instances plus trail meshes (cairns, entries, ribbons).
+    - Build time (this container, Node): jungle layout median 445 ms / p95 1.7 s (retries), focus mesh median 220 ms, overview mesh 112 ms; in headless Chrome first build (layout + focus mesh) 169–217 ms. Budget 90 ms focus / 60 ms overview. Plan deviation 12 already flagged this.
+    - Jungle overview props up to 9.9k tris (budget 8k). Terrain triangles are within budget (focus ≤ 23.2k lit + 0.9k unlit; overview ≤ 9.4k + 0.9k).
+
+Open decisions for the user: Q3 (toon vs Lambert: nearly indistinguishable at this scale), Q5 (palm), whether to fix performance (build time, draw calls) before Phase 6 or in it, and whether to relight/retire the legacy biomes sooner given how they look in the overview now.
