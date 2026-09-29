@@ -440,6 +440,29 @@ def colour_terrain(terrain):
 
 # ---------------------------------------------------------------------------------------------------------- water
 
+def gradient_rings(rings, y, name):
+    """Concentric bands between outlines with per-vertex colour, so shallows and foam fade instead of stepping."""
+    bm = new_bm()
+    layer = bm.loops.layers.float_color['Col']
+    verts = [[bm.verts.new(P(x, y, z)) for x, z in pts] for pts, _ in rings]
+    n = len(rings[0][0])
+    for r in range(len(rings) - 1):
+        for i in range(n):
+            j = (i + 1) % n
+            f = bm.faces.new((verts[r][i], verts[r][j], verts[r + 1][j], verts[r + 1][i]))
+            for loop in f.loops:
+                loop[layer] = rings[r][1] if loop.vert in (verts[r][i], verts[r][j]) else rings[r + 1][1]
+    for f in bm.faces:
+        f.normal_update()
+        if f.normal.z < 0:
+            f.normal_flip()
+    return to_object(bm, name)
+
+
+def lerp_outline(a, b, t):
+    return [(pa[0] + (pb[0] - pa[0]) * t, pa[1] + (pb[1] - pa[1]) * t) for pa, pb in zip(a, b)]
+
+
 def ring_mesh(outer, inner, y, colour_outer, colour_inner, name):
     bm = new_bm()
     n = len(outer)
@@ -464,8 +487,10 @@ def shrink(pts, d):
 def build_water():
     parts = []
     beach = outline(BEACH)
-    parts.append(ring_mesh(outline(0), shrink(beach, 0.05), -0.042, col(PAL['shallow']), None, 'shallow'))
-    parts.append(ring_mesh(outline(1), shrink(beach, 0.03), -0.036, col(PAL['foam']), None, 'foam'))
+    halo, foam_edge = outline(0), outline(1)
+    water, shallow, foam = col(PAL['water']), col(PAL['shallow']), col(PAL['foam'])
+    parts.append(gradient_rings([(shrink(beach, 0.05), shallow), (beach, shallow), (lerp_outline(beach, halo, 0.45), mix(shallow, water, 0.55)), (halo, water)], -0.042, 'shallow'))
+    parts.append(gradient_rings([(shrink(beach, 0.03), foam), (beach, foam), (lerp_outline(beach, foam_edge, 0.5), mix(foam, shallow, 0.45)), (foam_edge, shallow)], -0.036, 'foam'))
     return parts
 
 
@@ -477,6 +502,8 @@ class Sink:
     def __init__(self):
         self.bm = new_bm()
         self.layer = self.bm.loops.layers.float_color['Col']
+        # smooth-shaded foliage (tree crowns, bushes) goes to its own mesh, drawn with the soft Lambert material
+        self.soft = new_bm()
 
     def face(self, M, pts, c, double=False):
         vs = [self.bm.verts.new(M @ Vector(p)) for p in pts]
@@ -512,7 +539,9 @@ class Sink:
                 loop[self.layer] = cap_top
 
     def blob(self, M, centre, radius, top, side, bottom, subdiv=1, squash=1.0, jitter=0.22, seed=0.0, smooth=False):
-        res = bmesh.ops.create_icosphere(self.bm, subdivisions=subdiv, radius=radius, matrix=Matrix.Identity(4))
+        bm = self.soft if smooth else self.bm
+        layer = bm.loops.layers.float_color['Col']
+        res = bmesh.ops.create_icosphere(bm, subdivisions=subdiv, radius=radius, matrix=Matrix.Identity(4))
         verts = res['verts']
         for v in verts:
             n = noise.noise(v.co * (3.0 / radius) + Vector((seed, seed * 1.7, 0)))
@@ -522,10 +551,17 @@ class Sink:
         for f in faces:
             f.normal_update()
             f.smooth = smooth
+            if smooth:
+                continue
             nz = f.normal.z
             c = top if nz > 0.45 else bottom if nz < -0.35 else side
             for loop in f.loops:
-                loop[self.layer] = c
+                loop[layer] = c
+        if smooth:  # per-vertex colour, so the crown shades from lit top to dark underside without facets
+            for f in faces:
+                for loop in f.loops:
+                    nz = (loop.vert.co - (M @ Vector(centre))).normalized().z
+                    loop[layer] = mix(bottom, side, min(1, (nz + 1) / 1.2)) if nz < 0.2 else mix(side, top, min(1, (nz - 0.2) / 0.6))
 
 
 def frame(x, z, y, yaw=0.0, scale=1.0, tilt=(0.0, 0.0)):
@@ -587,8 +623,8 @@ def canopy_tree(sink, M, h, r):
         a = 2 * math.pi * i / k + r.uniform(-0.3, 0.3)
         rr = h * r.uniform(0.22, 0.27)
         off = Vector((math.cos(a) * h * 0.19, math.sin(a) * h * 0.19, h * r.uniform(0.03, 0.1)))
-        sink.blob(M, top + off, rr, lit, mid, shade, subdiv=2, squash=0.8, jitter=0.07, seed=r.uniform(0, 50), smooth=True)
-    sink.blob(M, top + Vector((0, 0, h * 0.25)), h * 0.27, lit, mid, deep, subdiv=2, squash=0.82, jitter=0.07, seed=r.uniform(0, 50), smooth=True)
+        sink.blob(M, top + off, rr, lit, mid, shade, subdiv=2, squash=0.8, jitter=0.035, seed=r.uniform(0, 50), smooth=True)
+    sink.blob(M, top + Vector((0, 0, h * 0.25)), h * 0.27, lit, mid, deep, subdiv=2, squash=0.82, jitter=0.035, seed=r.uniform(0, 50), smooth=True)
 
 
 def broadleaf(sink, M, h, r):
@@ -613,7 +649,7 @@ def fern(sink, M, h, r):
 
 def bush(sink, M, h, r):
     rr = h * r.uniform(0.6, 0.75)
-    sink.blob(M, (0, 0, rr * 0.7), rr, col(JUNGLE['leafLight']), col(FOL['bush']), col(JUNGLE['leaf']), subdiv=2, squash=0.8, jitter=0.08, seed=r.uniform(0, 50), smooth=True)
+    sink.blob(M, (0, 0, rr * 0.7), rr, col(JUNGLE['leafLight']), col(FOL['bush']), col(JUNGLE['leaf']), subdiv=2, squash=0.8, jitter=0.04, seed=r.uniform(0, 50), smooth=True)
 
 
 def grass_tuft(sink, M, h, r):
@@ -957,7 +993,8 @@ def pillars_and_rocks(sink, unlit):
 
 def fall_ribbon(unlit, pts, width, name_seed):
     """Waterfall strip through world points pts (layout frame, top to bottom), offset just outside the wall."""
-    fall, streak = col(PAL['fall']), col(PAL['fallStreak'])
+    fall = col(PAL['fall'])
+    streak = mix(fall, col(PAL['fallStreak']), 0.45)
     for i in range(len(pts) - 1):
         (x0, y0, z0, nx0, nz0), (x1, y1, z1, nx1, nz1) = pts[i], pts[i + 1]
         stripes = 5
@@ -981,7 +1018,8 @@ STREAMS = []  # (x0, z0, x1, z1): plants keep off these
 
 def stream(unlit, x0, z0, x1, z1, y, width=0.1):
     STREAMS.append((x0, z0, x1, z1))
-    fall, streak = col(PAL['fall']), col(PAL['fallStreak'])
+    fall = col(PAL['fall'])
+    streak = mix(fall, col(PAL['fallStreak']), 0.35)
     length = math.hypot(x1 - x0, z1 - z0)
     if length < 1e-3:
         return
@@ -1138,7 +1176,7 @@ def bake_attribute(ob, kind, name, samples):
     return [tuple(d.color) for d in me.color_attributes[name].data]
 
 
-def bake_lighting(ob):
+def bake_lighting(ob, strength=1.0):
     """Bakes ambient occlusion and the sun's cast shadows into the vertex colours, so the island keeps soft contact
     shading and tree shadows under the app's single toon material."""
     scene = bpy.context.scene
@@ -1164,7 +1202,7 @@ def bake_lighting(ob):
     for i, d in enumerate(base):
         a = ao[i][0]
         sh = shadow[i][0]
-        k = (0.3 + 0.7 * a) * (0.62 + 0.38 * sh)
+        k = 1 - strength * (1 - (0.3 + 0.7 * a) * (0.62 + 0.38 * sh))
         c = d.color
         d.color = (c[0] * k, c[1] * k, c[2] * k, 1.0)
     for name in ('AO', 'Shadow'):
@@ -1192,6 +1230,7 @@ def main():
     beach_details(ground, sink)
     rim_fringe(ground, sink)
     scatter(ground, sink, unlit_sink)
+    soft = to_object(sink.soft, 'Soft')
     lit = [terrain, to_object(sink.bm, 'props')]
     unlit = build_water() + [to_object(unlit_sink.bm, 'unlitProps')]
     for group, name in ((lit, 'Lit'), (unlit, 'Unlit')):
@@ -1205,6 +1244,7 @@ def main():
         for o in bpy.context.selected_objects:
             o.select_set(False)
     bake_lighting(bpy.data.objects['Lit'])
+    bake_lighting(soft, strength=0.6)
     for ob in bpy.data.objects:
         ob.data.color_attributes.active_color = ob.data.color_attributes['Col']
     bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', export_vertex_color='ACTIVE', export_materials='NONE', export_yup=True)

@@ -49,7 +49,7 @@ export function TerracedIsland({ build, materialKind = 'toon', onClick, onPointe
   return (
     <group>
       {build.layout.biome === 'jungle' ? (
-        <JungleIsland litMaterial={getTerrainLitMaterial(materialKind)} unlitMaterial={terrainUnlitMaterial} />
+        <JungleIsland litMaterial={getTerrainLitMaterial(materialKind)} softMaterial={getTerrainLitMaterial('lambert')} unlitMaterial={terrainUnlitMaterial} />
       ) : (
         <>
           <mesh geometry={build.lit} material={getTerrainLitMaterial(materialKind)} raycast={() => null} />
