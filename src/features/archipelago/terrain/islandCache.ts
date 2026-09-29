@@ -57,7 +57,7 @@ export function getIslandBuild(biome: Biome, seed: number, detail: IslandDetail)
   }
   const t0 = performance.now()
   const layout = getIslandLayout(biome, seed)
-  // A hand-built island draws its own model (models/JungleIsland.tsx); only the hull comes from the layout.
+  // A hand-built island draws its own model (models/HandBuiltIsland.tsx); only the hull comes from the layout.
   const handBuilt = hasHandBuiltIsland(biome)
   const terrain = handBuilt ? { lit: new BufferGeometry(), unlit: new BufferGeometry(), hull: buildHull(layout) } : buildTerrain(layout, detail)
   let props = 0

@@ -1,6 +1,8 @@
+import { useEffect } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { useMatch, useNavigate } from 'react-router'
 import { useGoals } from './api'
+import type { Goal } from './api'
 import { Island } from './Island'
 import { SceneEnvironment } from './SceneEnvironment'
 import { HullRegistryProvider } from './hullRegistry'
@@ -8,6 +10,7 @@ import { CameraRig } from './CameraRig'
 import { RoadmapTrail } from '../roadmap/RoadmapTrail'
 import { isTerraced } from '../../lib/island/biomes'
 import { ISLAND_YAW } from '../../lib/island/orientation'
+import { preloadHandBuiltIslands } from './models/HandBuiltIsland'
 
 interface ArchipelagoSceneProps {
   showCompleted: boolean
@@ -20,6 +23,10 @@ export function ArchipelagoScene({ showCompleted }: ArchipelagoSceneProps) {
   // the nested <Routes> that declares /g/:id — so it would always be undefined.
   const focusedGoalId = useMatch('/g/:id')?.params.id
   const { data: goals } = useGoals()
+  const biomeKey = [...new Set(goals?.map((goal) => goal.biome))].sort().join(',')
+  useEffect(() => {
+    if (biomeKey) preloadHandBuiltIslands(biomeKey.split(',') as Goal['biome'][])
+  }, [biomeKey])
 
   const filteredGoals = goals?.filter((goal) => showCompleted || goal.status !== 'completed') ?? []
   // Resolved from the unfiltered list (matching HomeOverlay): a goal the user
