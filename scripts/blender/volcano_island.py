@@ -19,6 +19,8 @@ import island_core  # noqa: E402
 island_core.init('volcano')
 from island_core import *  # noqa: E402,F401,F403
 
+EXTRA_SOFT, EXTRA_UNLIT = [], []  # finished objects joined into the Soft / Unlit meshes
+
 VO = {
     'basalt': '#4A4442', 'basaltLit': '#5E5653', 'basaltShade': '#3A3534', 'basaltDark': '#2C2828', 'rust': '#7A4A3A',
     'ash': '#8C827C', 'ashLight': '#A09690', 'ashDark': '#6E6560', 'scoria': '#5A3E36', 'sulphur': '#D9C45A',
@@ -49,7 +51,9 @@ def cone_offset(level, seed):
         h = (y - lo) / (hi - lo)
         ribs = noise.noise(Vector((math.cos(a) * 6 + seed, math.sin(a) * 6, h * 0.6)))  # lava-flow ribs down the slope
         d = 0.03 * ribs + 0.008 * noise.noise(Vector((math.cos(a) * 14, math.sin(a) * 14, h * 3 + seed)))
-        d += 0.24 * max(0.0, 1 - h * 1.6) ** 2  # the cinder skirt
+        # the cinder skirt: linear, so it meets the ground below at a clear angle rather than skimming along it
+        # (a squared profile went nearly flat at the foot and z-fought the lawn)
+        d += 0.2 * max(0.0, 1 - h * 1.6)
         if h > 0.94:
             d = 0.01
         return d
@@ -192,8 +196,8 @@ def smoke_plume(sink, M, r):
 
 def crater_cone(sink, unlit, M, base_r, height, crater_r):
     """A broad truncated cone with a jagged rim and a glowing lava lake in its crater (local frame, base at 0)."""
-    rings, sides = 16, 28
-    bm = sink.soft
+    rings, sides = 12, 20  # smoothed by a subdivision modifier below, so a coarse cage is enough
+    bm = new_bm()
     layer = bm.loops.layers.float_color['Col']
     verts = []
     for k in range(rings + 1):
@@ -234,6 +238,7 @@ def crater_cone(sink, unlit, M, base_r, height, crater_r):
         j = (i + 1) % sides
         unlit.face(Matrix.Identity(4), [tuple(rings_l[0][i]), tuple(rings_l[0][j]), tuple(rings_l[1][j]), tuple(rings_l[1][i])], col(VO['lava']), double=True)
         unlit.face(Matrix.Identity(4), [tuple(rings_l[1][i]), tuple(rings_l[1][j]), tuple(centre)], col(VO['lavaHot']), double=True)
+    EXTRA_SOFT.append(smoothed(bm, 'cone', levels=2))
 
 
 def summit_cone(ground, sink, unlit, keep_out):
@@ -385,21 +390,18 @@ def cone_flow(ground, unlit, cone):
         return
     a = best[1]
     dx, dz = math.cos(a), math.sin(a)
-    # down the flank, following the cone's profile, a little proud of its surface
-    steps = 14
-    prev = None
+    # down the flank as a smooth, rounded river (a bevelled Bezier curve), a little proud of the cone's surface,
+    # meandering slightly and cooling from hot yellow at the lip to deep orange at the foot
+    pts = []
+    steps = 12
+    side = (-dz, dx)
     for k in range(steps + 1):
         u = k / steps
         d = lip + (base - lip) * u
         t = 1 - ((d - lip) / (base - lip)) ** (1 / 3) if d > lip else 1.0
-        y = foot + 0.02 + height * t + 0.012
-        w = 0.022 + 0.03 * u
-        pt = (x + dx * d, y, z + dz * d, w)
-        if prev:
-            (ax, ay, az, aw), (bx, by, bz, bw) = prev, pt
-            q = [P(ax - dz * aw, ay, az + dx * aw), P(ax + dz * aw, ay, az - dx * aw), P(bx + dz * bw, by, bz - dx * bw), P(bx - dz * bw, by, bz + dx * bw)]
-            unlit.face(Matrix.Identity(4), [tuple(v) for v in q], col(VO['lavaHot']) if k % 3 == 1 else col(VO['lava']), double=True)
-        prev = pt
+        wig = 0.04 * math.sin(u * 7.0) * u
+        pts.append((x + dx * d + side[0] * wig, foot + 0.02 + height * t + 0.018, z + dz * d + side[1] * wig))
+    EXTRA_UNLIT.append(curve_ribbon(pts, 0.035, lambda t: mix(col(VO['lavaHot']), col(VO['lavaDeep']), t ** 0.7), 'coneLava', thickness=0.006))
     cascade(ground, unlit, x + dx * (base - 0.02), z + dz * (base - 0.02), dx, dz)
     print('cone flow', round(math.degrees(a)))
 
@@ -519,7 +521,7 @@ def main():
     path_stones(ground, sink)
     rim_fringe(ground, sink, dry_tuft)
     scatter(ground, sink, unlit_sink, KINDS, keep_out)
-    finish(terrain, sink, unlit_sink, sun_angle=20)  # soft shadows: the cone's shadow falls across coarse walls
+    finish(terrain, sink, unlit_sink, sun_angle=20, extra_soft=EXTRA_SOFT, extra_unlit=EXTRA_UNLIT)  # soft shadows: the cone's shadow falls across coarse walls
 
 
 main()

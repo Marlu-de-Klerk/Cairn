@@ -620,6 +620,90 @@ def box(sink, M, lo, hi, top, side, bottom=None):
         sink.face(M, [v[i] for i in idx], c)
 
 
+def curve_ribbon(points, width, colour, name='ribbon', thickness=0.004, resolution=6):
+    """A smooth rounded ribbon along layout-frame points (x, y, z), built as a bevelled, extruded Bezier curve and
+    converted to a mesh; colour(t) gives the vertex colour at fraction t along it. Returns a finished object with a
+    'Col' corner attribute, ready for finish(extra_...)."""
+    cu = bpy.data.curves.new(name, type='CURVE')
+    cu.dimensions = '3D'
+    cu.resolution_u = resolution
+    cu.twist_mode = 'Z_UP'
+    sp = cu.splines.new('BEZIER')
+    sp.bezier_points.add(len(points) - 1)
+    for bp, (x, y, z) in zip(sp.bezier_points, points):
+        bp.co = P(x, y, z)
+        bp.handle_left_type = bp.handle_right_type = 'AUTO'
+    cu.extrude = 0.0
+    cu.bevel_mode = 'ROUND'
+    cu.bevel_depth = thickness
+    cu.bevel_resolution = 1
+    for bp in sp.bezier_points:
+        bp.radius = 1.0
+    # flatten the round bevel into a wide ribbon by scaling the profile: a flat, slightly domed lava river
+    ob = bpy.data.objects.new(name, cu)
+    bpy.context.scene.collection.objects.link(ob)
+    for bp in sp.bezier_points:
+        bp.tilt = 0.0
+    dg = bpy.context.evaluated_depsgraph_get()
+    me = bpy.data.meshes.new_from_object(ob.evaluated_get(dg))
+    bpy.data.objects.remove(ob, do_unlink=True)
+    bpy.data.curves.remove(cu)
+    # widen across the path: push each vertex sideways from the centreline in the ground plane
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    pts = [P(*p) for p in points]
+    for v in bm.verts:
+        best, bi = 9e9, 0
+        for i in range(len(pts) - 1):
+            a, b = pts[i], pts[i + 1]
+            ab = b - a
+            t = max(0.0, min(1.0, (v.co - a).dot(ab) / (ab.length_squared or 1)))
+            d = (a + ab * t - v.co).length
+            if d < best:
+                best, bi, bt = d, i, t
+        a, b = pts[bi], pts[bi + 1]
+        c = a + (b - a) * bt
+        side = v.co - c
+        side.z = 0
+        if side.length > 1e-9:
+            v.co += side.normalized() * (width * (0.6 + 0.4 * (bi + bt) / (len(pts) - 1)) - side.length)
+        v.co.z += thickness * 0.5
+    layer = bm.loops.layers.float_color.new('Col')
+    n = len(pts) - 1
+    for f in bm.faces:
+        f.smooth = True
+        for loop in f.loops:
+            co = loop.vert.co
+            best, bt = 9e9, 0.0
+            for i in range(n):
+                a, b = pts[i], pts[i + 1]
+                ab = b - a
+                t = max(0.0, min(1.0, (co - a).dot(ab) / (ab.length_squared or 1)))
+                d = (a + ab * t - co).length
+                if d < best:
+                    best, bt = d, (i + t) / n
+            loop[layer] = colour(bt)
+    bm.to_mesh(me)
+    bm.free()
+    out = bpy.data.objects.new(name, me)
+    bpy.context.scene.collection.objects.link(out)
+    return out
+
+
+def smoothed(bm, name, levels=1):
+    """Turns a bmesh into an object smoothed with a Subdivision Surface modifier (applied), keeping its corner colours."""
+    ob = to_object(bm, name)
+    for poly in ob.data.polygons:
+        poly.use_smooth = True
+    m = ob.modifiers.new('subsurf', 'SUBSURF')
+    m.levels = levels
+    m.render_levels = levels
+    apply_modifiers(ob)
+    for poly in ob.data.polygons:
+        poly.use_smooth = True
+    return ob
+
+
 def campfire(sink, unlit, M, r):
     for i in range(8):
         a = 2 * math.pi * i / 8
@@ -939,12 +1023,14 @@ def bake_lighting(ob, strength=1.0, sun_angle=4.0):
     bpy.data.objects.remove(sun_ob)
 
 
-def finish(terrain, sink, unlit_sink, sun_angle=4.0):
-    """Joins everything into the Lit, Soft and Unlit meshes, bakes their lighting and exports OUT."""
+def finish(terrain, sink, unlit_sink, sun_angle=4.0, extra_soft=(), extra_unlit=()):
+    """Joins everything into the Lit, Soft and Unlit meshes, bakes their lighting and exports OUT. extra_soft and
+    extra_unlit are finished objects (e.g. modifier-smoothed or curve-built) with a 'Col' corner colour attribute."""
     soft = to_object(sink.soft, 'Soft')
     lit = [terrain, to_object(sink.bm, 'props')]
-    unlit = build_water() + [to_object(unlit_sink.bm, 'unlitProps')]
-    for group, name in ((lit, 'Lit'), (unlit, 'Unlit')):
+    unlit = build_water() + [to_object(unlit_sink.bm, 'unlitProps')] + list(extra_unlit)
+    groups = [(lit, 'Lit'), (unlit, 'Unlit')] + ([([soft] + list(extra_soft), 'Soft')] if extra_soft else [])
+    for group, name in groups:
         for o in group:
             o.select_set(True)
         bpy.context.view_layer.objects.active = group[0]
@@ -954,6 +1040,7 @@ def finish(terrain, sink, unlit_sink, sun_angle=4.0):
         group[0].data.name = name
         for o in bpy.context.selected_objects:
             o.select_set(False)
+    soft = bpy.data.objects['Soft']
     bake_lighting(bpy.data.objects['Lit'], sun_angle=sun_angle)
     if soft.data.polygons:
         bake_lighting(soft, strength=0.6, sun_angle=sun_angle)
