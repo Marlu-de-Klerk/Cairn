@@ -131,40 +131,47 @@ def desert_cliff(level, h, n1, n2, x, y, z):
 # ---------------------------------------------------------------------------------------------------------- dunes
 
 def dune(sink, x, z, y, length, width, height, yaw, seed):
-    """A low wind-shaped mound: gentle windward back, steeper lee face, edges sunk into the lawn."""
+    """A barchan: a long windward ramp up to a sharp crest line, a steep lee slip face, and horns that trail
+    downwind (local +x). Built in rows across the wind so every row has a vertex exactly on the crest."""
     M = frame(x, z, y, yaw)
-    crest = 0.3
-    rings, segs = 6, 20
+    rows, up, down = 13, 7, 4
     grid = []
-    for k in range(rings + 1):
-        s = k / rings
-        ring = []
-        for m in range(segs):
-            t = 2 * math.pi * m / segs
-            u, v = math.cos(t) * s, math.sin(t) * s
-            su = (u - crest) / (1 - crest) if u > crest else (u - crest) / (1 + crest)
-            e = min(1.0, su * su + v * v)
-            b = 1 - e
-            hh = height * b * b * (3 - 2 * b) * (1 + 0.12 * noise.noise(Vector((u * 2 + seed, v * 2, 0.5)))) if k < rings else -0.012
-            ring.append(sink.bm.verts.new(M @ Vector((u * length / 2, v * width / 2, hh))))
-        grid.append(ring)
-    apex = sink.bm.verts.new(M @ Vector((crest * 0 * length / 2, 0, height * 0.98)))
+    for j in range(rows):
+        v = -0.96 + 1.92 * j / (rows - 1)
+        w = math.sqrt(max(0.0, 1 - v * v))  # half-chord of the footprint across this row
+        crest = (0.12 + 0.55 * v * v) * w  # the crest bows downwind towards the horns
+        peak = height * (1 - v * v) ** 1.3
+        row = []
+        for i in range(up + down + 1):
+            if i <= up:
+                t = i / up
+                u = -w + (crest + w) * t
+                hh = peak * t ** 1.35  # the windward ramp steepens a little towards the crest
+            else:
+                t = (i - up) / down
+                u = crest + (w * 0.92 - crest) * t
+                hh = peak * (1 - t) ** 2.2 * (1 - 0.1 * t)  # the slip face falls away sharply
+            if i in (0, up + down) or j in (0, rows - 1):
+                hh = -0.012
+            hh *= 1 + 0.06 * noise.noise(Vector((u * 2 + seed, v * 2, 0.5)))
+            row.append(sink.bm.verts.new(M @ Vector((u * length / 2, v * width / 2, hh))))
+        grid.append(row)
     faces = []
-    for m in range(segs):
-        faces.append(sink.bm.faces.new((apex, grid[1][m], grid[1][(m + 1) % segs])))
-    for k in range(1, rings):
-        for m in range(segs):
-            n = (m + 1) % segs
-            faces.append(sink.bm.faces.new((grid[k][m], grid[k + 1][m], grid[k + 1][n], grid[k][n])))
+    n = up + down + 1
+    for j in range(rows - 1):
+        for i in range(n - 1):
+            faces.append(sink.bm.faces.new((grid[j][i], grid[j][i + 1], grid[j + 1][i + 1], grid[j + 1][i])))
     wind = Matrix.Rotation(yaw, 4, 'Z').to_3x3() @ Vector((1, 0, 0))
     for f in faces:
         f.normal_update()
-        lee = f.normal.dot(wind)  # faces looking downwind are the steep, shadowed lee side
+        if f.normal.z < 0:
+            f.normal_flip()
+        lee = f.normal.dot(wind)  # faces looking downwind are the steep, shadowed slip face
         for loop in f.loops:
             c = loop.vert.co
-            k = dune_colour(c.x, -c.y, 0.4 - 0.9 * max(0.0, lee))
-            if lee > 0.35:
-                k = mix(k, col(DESERT['duneDeep']), 0.35)
+            k = dune_colour(c.x, -c.y, 0.45 - 1.2 * max(0.0, lee))
+            if lee > 0.25:
+                k = mix(k, col(DESERT['duneDeep']), 0.5)
             loop[sink.layer] = k
     return faces
 
@@ -607,51 +614,92 @@ def summit_ruins(ground, sink, keep_out):
     for _ in range(3000):
         x, z = rng.uniform(-3, 3), rng.uniform(-3, 3)
         gy, nz = ground.at(x, z)
-        if gy is None or abs(gy - top) > 0.004 or ground.trail_distance(x, z, gy) < HW + 0.14:
+        if gy is None or abs(gy - top) > 0.004 or ground.trail_distance(x, z, gy) < HW + 0.1:
             continue
-        if math.hypot(x - cairn['x'], z - cairn['z']) < 0.34:
+        if math.hypot(x - cairn['x'], z - cairn['z']) < 0.3:
             continue
         spots.append((x, z))
+    spot_set = spots
     placed = []
 
     def free(x, z, r):
         return all(math.hypot(x - px, z - pz) > r + pr for px, pz, pr in placed)
 
+    def ok(x, z, r):
+        gy, _ = ground.at(x, z)
+        return (gy is not None and abs(gy - top) < 0.004 and ground.trail_distance(x, z, top) > HW + 0.06 + r * 0.5
+                and math.hypot(x - cairn['x'], z - cairn['z']) > 0.26 + r and ground.flat(x, z, top, r * 0.8))
+
     # the arch first: the flattest open spot furthest back from the camera, spanning across the view
     best = None
-    for x, z in spots:
+    for x, z in spot_set:
         if not ground.flat(x, z, top, 0.17) or ground.blocks_trail(x, z, top, 0.3):
             continue
         score = -z + 0.3 * min(ground.trail_distance(x, z, top), 0.6)
         if best is None or score > best[0]:
             best = (score, x, z)
+    anchors = []  # things rubble falls around
     if best:
         _, x, z = best
         arch(sink, frame(x, z, top - 0.004, 0.25 * rng.uniform(-1, 1)), rng)
-        placed.append((x, z, 0.2))
+        placed.append((x, z, 0.16))
         keep_out.append((x, z, 0.22))
-    made = {'column': 0, 'block': 0, 'drum': 0}
-    want = {'column': 5, 'block': 6, 'drum': 3}
+        anchors.append((x, z, 0.17))
+    made = {'column': 0, 'wall': 0, 'block': 0, 'drum': 0}
     rng.shuffle(spots)
-    for x, z in [(x, z) for kind in want for x, z in spots]:
-        kind = next((k for k in ('column', 'block', 'drum') if made[k] < want[k]), None)
-        if kind is None:
+    # standing and broken columns, loosely in a colonnade row
+    for x, z in spots:
+        if made['column'] >= 6:
             break
-        r = {'column': 0.07, 'block': 0.06, 'drum': 0.07}[kind]
-        if not free(x, z, r + 0.05) or not ground.flat(x, z, top, r):
+        if not free(x, z, 0.1) or not ok(x, z, 0.06):
+            continue
+        h = rng.uniform(0.18, 0.34)
+        if ground.blocks_trail(x, z, top, h):
+            continue
+        column(sink, frame(x, z, top - 0.004, rng.uniform(0, 2 * math.pi)), h, rng, broken=made['column'] > 0)
+        placed.append((x, z, 0.06))
+        keep_out.append((x, z, 0.1))
+        anchors.append((x, z, 0.06))
+        made['column'] += 1
+    # a low broken wall: a short run of uneven courses
+    for x, z in spots:
+        if made['wall'] >= 1:
+            break
+        yaw = rng.uniform(0, math.pi)
+        ends = [(x + math.cos(yaw) * d, z - math.sin(yaw) * d) for d in (-0.16, 0.0, 0.16)]
+        if not all(free(ex, ez, 0.05) and ok(ex, ez, 0.04) for ex, ez in ends):
+            continue
+        M = frame(x, z, top - 0.004, yaw)
+        for c in range(3):
+            n_blocks = 4 - c
+            for k in range(n_blocks):
+                if c > 0 and rng.random() < 0.3:
+                    continue
+                x0 = -0.17 + 0.34 * k / 4 + c * 0.02 + rng.uniform(-0.005, 0.005)
+                box(sink, M, (x0, -0.022, -0.01 + c * 0.04), (x0 + 0.08, 0.022, 0.028 + c * 0.04), stone(tone='stoneLit'), stone(0.95 + 0.06 * ((k + c) % 2)), stone(tone='stoneDark'))
+        for ex, ez in ends:
+            placed.append((ex, ez, 0.05))
+        keep_out.append((x, z, 0.24))
+        anchors.append((x, z, 0.12))
+        made['wall'] += 1
+    # rubble: fallen blocks and column drums lying around the anchors, then anywhere left
+    near = []
+    for ax, az, ar in anchors:
+        for _ in range(12):
+            a = rng.uniform(0, 2 * math.pi)
+            d = ar + rng.uniform(0.07, 0.16)
+            near.append((ax + math.cos(a) * d, az + math.sin(a) * d))
+    for x, z in near + spots:
+        if made['block'] >= 9 and made['drum'] >= 4:
+            break
+        kind = 'drum' if made['drum'] < 4 and (made['block'] >= 9 or rng.random() < 0.35) else 'block'
+        r = 0.05 if kind == 'drum' else 0.04
+        if not free(x, z, r + 0.015) or not ok(x, z, r):
             continue
         M = frame(x, z, top - 0.004, rng.uniform(0, 2 * math.pi))
-        if kind == 'column':
-            h = rng.uniform(0.2, 0.34)
-            if ground.blocks_trail(x, z, top, h):
-                continue
-            column(sink, M, h, rng, broken=made['column'] > 0)
-        elif kind == 'block':
-            fallen_block(sink, M, rng)
-        else:
-            fallen_drum(sink, M, rng)
+        (fallen_drum if kind == 'drum' else fallen_block)(sink, M, rng)
         placed.append((x, z, r))
-        keep_out.append((x, z, r + 0.04))
+        keep_out.append((x, z, r + 0.03))
         made[kind] += 1
     print('ruins', made, 'arch', best is not None)
 
