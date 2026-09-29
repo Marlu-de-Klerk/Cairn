@@ -33,7 +33,7 @@ FOL.update({'campfireStone': '#AEB6BC', 'log': SNOW['log'], 'stumpInner': SNOW['
 # ---------------------------------------------------------------------------------------------------------- terrain
 
 def granite_offset(level, seed):
-    """Blocky granite: vertical joints in facets, a few big steps, talus at the foot and a snow cornice at the rim."""
+    """Weathered granite: broad buttresses and gullies, gentle ledges, talus at the foot and a snow cornice at the rim."""
     lo = LEVEL_Y[level - 1]
     hi = LEVEL_Y[level]
 
@@ -42,10 +42,9 @@ def granite_offset(level, seed):
             return 0.0
         a = 2 * math.pi * i / 128
         h = (y - lo) / (hi - lo)
-        facet = math.floor((a * 10 + seed) / 1.0)  # joint blocks around the ring
-        block = noise.noise(Vector((facet * 1.7 + seed, level, math.floor(h * 4) * 0.9)))
-        d = 0.035 * block + 0.01 * noise.noise(Vector((math.cos(a) * 12, math.sin(a) * 12, h * 3 + seed)))
-        d += 0.012 * (math.floor(h * 4) % 2)  # alternating proud and recessed steps
+        buttress = noise.noise(Vector((math.cos(a) * 3.5 + seed, math.sin(a) * 3.5, h * 0.8)))
+        d = 0.04 * buttress + 0.008 * noise.noise(Vector((math.cos(a) * 10, math.sin(a) * 10, h * 2 + seed)))
+        d += 0.012 * math.sin(h * math.pi * 6 + seed) ** 2  # soft ledges where snow collects
         d += 0.08 * max(0.0, 1 - h * 3.5) ** 2  # talus
         if h > 0.93:
             d = 0.02  # snow cornice hanging over the rim
@@ -85,19 +84,24 @@ def tundra_lip(x, y, z, n1, n2):
     return snow_colour(x, z, -0.3)
 
 
+def smooth(t):
+    t = max(0.0, min(1.0, t))
+    return t * t * (3 - 2 * t)
+
+
+def granite(x, y, z):
+    """Granite tone as a smooth blend of low-frequency noise, so neighbouring faces never jump in shade."""
+    n = noise.noise(Vector((x * 1.6, y * 1.2, z * 1.6)))
+    k = mix(col(SNOW['graniteShade']), col(SNOW['graniteLit']), smooth(0.5 + 0.8 * n))
+    return mix(k, col(SNOW['granite']), 0.35)
+
+
 def tundra_cliff(level, h, n1, n2, x, y, z):
-    tone = 'graniteLit' if n1 > 0.25 else 'graniteShade' if n1 < -0.25 else 'granite'
-    k = col(SNOW[tone], 0.94 + 0.08 * (0.5 + 0.5 * n2))
-    if abs(noise.noise(Vector((x * 9, z * 9, 0.4)))) < 0.03:
-        k = col(SNOW['joint'])  # joints
-    streak = noise.noise(Vector((x * 11, z * 11, 3.1)))
-    if h > 0.88 or (streak > 0.35 and h > 0.35):
-        k = snow_colour(x, z, -0.2)  # cornice and snow streaks down the gullies
-    elif (h * 4) % 1 > 0.9:
-        k = mix(k, col(SNOW['snow']), 0.8)  # snow lying on each step
-    elif h < 0.1:
-        k = col(SNOW['graniteDark'], 0.95 + 0.1 * n2)
-    return k
+    k = granite(x, y, z)
+    k = mix(k, col(SNOW['graniteDark']), smooth((0.14 - h) / 0.1) * 0.7)  # darker, wetter foot
+    streak = noise.noise(Vector((x * 5, y * 0.8, z * 5)))
+    snow = max(smooth((h - 0.84) / 0.08), smooth((streak - 0.3) / 0.15) * smooth((h - 0.3) / 0.2))
+    return mix(k, snow_colour(x, z, -0.25), snow)
 
 
 # ---------------------------------------------------------------------------------------------------------- plants and props
@@ -197,17 +201,19 @@ def peak(sink, M, height, base, r):
             ring.append(sink.bm.verts.new(M @ (Vector((math.cos(a) * rad * jag, math.sin(a) * rad * jag, height * t - 0.03)) + lean)))
         verts.append(ring)
     tip = sink.bm.verts.new(M @ Vector((0.14 * base, 0.1 * base, height + 0.04)))
+    base_z = (M @ Vector((0, 0, -0.03))).z
     for k in range(rings - 1):
         for i in range(sides):
             j = (i + 1) % sides
             f = sink.bm.faces.new((verts[k][i], verts[k][j], verts[k + 1][j], verts[k + 1][i]))
             f.normal_update()
-            t = (k + 0.5) / (rings - 1)
-            gully = noise.noise(Vector((math.cos(2 * math.pi * i / sides) * 4, math.sin(2 * math.pi * i / sides) * 4, 0.7)))
-            snowy = t > 0.45 or f.normal.z > 0.55 or (gully > 0.25 and t > 0.15)
-            c = snow_colour(i * 0.3, k * 0.3, -0.25 if f.normal.x < 0 else 0.2) if snowy else col(SNOW['granite' if (i + k) % 3 else 'graniteShade'])
             for loop in f.loops:
-                loop[sink.layer] = c
+                c = loop.vert.co
+                t = (c.z - base_z) / height
+                gully = noise.noise(Vector((c.x * 6, c.y * 6, 0.7)))
+                rock = granite(c.x, c.z, -c.y)
+                snow = max(smooth((t - 0.4) / 0.15), smooth((gully - 0.2) / 0.2) * smooth((t - 0.12) / 0.15))
+                loop[sink.layer] = mix(rock, snow_colour(c.x, -c.y, -0.2 if f.normal.x < 0 else 0.2), snow)
     for i in range(sides):
         f = sink.bm.faces.new((verts[-1][i], verts[-1][(i + 1) % sides], tip))
         for loop in f.loops:
@@ -308,7 +314,7 @@ def granite_spires(sink):
             for i in range(sides):
                 ta, tb = pl['rot'] + 2 * math.pi * i / sides, pl['rot'] + 2 * math.pi * (i + 1) / sides
                 q = [(ta, ya, radii[k]), (tb, ya, radii[k]), (tb, yb, radii[k + 1]), (ta, yb, radii[k + 1])]
-                c = col(SNOW['granite' if (i + k) % 3 else 'graniteShade'], 0.94 + 0.1 * ((i * 5) % 3) / 2)
+                c = granite(pl['x'] + math.cos(ta) * 0.1, (ya + yb) / 2, pl['z'] + math.sin(ta) * 0.1)
                 sink.face(I, [tuple(P(pl['x'] + r * math.cos(t), yy, pl['z'] + r * math.sin(t))) for t, yy, r in q][::-1], c)
         cap = [P(pl['x'] + radii[-1] * math.cos(pl['rot'] + 2 * math.pi * i / sides), y1, pl['z'] + radii[-1] * math.sin(pl['rot'] + 2 * math.pi * i / sides)) for i in range(sides)]
         sink.face(I, [tuple(v) for v in cap], col(SNOW['granite']))
