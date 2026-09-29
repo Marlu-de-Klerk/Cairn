@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { getIslandBuild, getIslandLayout, releaseIslandBuild } from './islandCache'
 
-// Volcano: jungle, desert, reef and tundra have hand-built models, so their cached builds carry only a hull.
+// Volcano: the other five biomes have hand-built models, so their cached builds carry only a hull.
 describe('islandCache', () => {
   it('builds each layout once', () => {
     expect(getIslandLayout('volcano', 3)).toBe(getIslandLayout('volcano', 3))
@@ -27,7 +27,7 @@ describe('islandCache', () => {
 })
 
 describe('islandCache (hand-built island)', () => {
-  it.each(['jungle', 'desert', 'reef', 'tundra'] as const)('builds only the hull for %s', (biome) => {
+  it.each(['jungle', 'desert', 'reef', 'tundra', 'highlands'] as const)('builds only the hull for %s', (biome) => {
     const build = getIslandBuild(biome, 1, 'overview')
     expect(build.hull.getAttribute('position').count).toBeGreaterThan(0)
     expect(build.triangles).toEqual({ lit: 0, unlit: 0, props: 0 })

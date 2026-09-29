@@ -8,7 +8,6 @@ import { useIslandBuild } from './terrain/islandCache'
 import { TerracedIsland } from './TerracedIsland'
 import { HullRegistryProvider } from './hullRegistry'
 import { VolcanoLandmass } from './models/VolcanoLandmass'
-import { HighlandsLandmass } from './models/HighlandsLandmass'
 import { islandLayoutSeed } from '../../lib/island/fixedIslands'
 
 type LandmassComponent = typeof VolcanoLandmass
@@ -19,7 +18,7 @@ const BIOMES: { key: Goal['biome']; label: string; Landmass: LandmassComponent |
   { key: 'tundra', label: 'Tundra', Landmass: null },
   { key: 'volcano', label: 'Volcano', Landmass: VolcanoLandmass },
   { key: 'reef', label: 'Reef', Landmass: null },
-  { key: 'highlands', label: 'Highlands', Landmass: HighlandsLandmass },
+  { key: 'highlands', label: 'Highlands', Landmass: null },
 ]
 
 interface BiomePickerProps {
