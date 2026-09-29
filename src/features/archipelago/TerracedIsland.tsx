@@ -11,8 +11,8 @@ import { getPropGeometry } from './terrain/propGeometry'
 import { PropPart } from './models/PropPart'
 import type { PropPlacement as PartPlacement } from './models/scatter'
 import { useHullRegistry } from './hullRegistry'
-import { JungleIsland } from './models/JungleIsland'
-import { hasHandBuiltIsland } from '../../lib/island/fixedIslands'
+import { HandBuiltIsland } from './models/HandBuiltIsland'
+import { HAND_BUILT } from '../../lib/island/fixedIslands'
 
 export interface TerracedIslandProps {
   readonly build: IslandBuild
@@ -47,10 +47,11 @@ export function TerracedIsland({ build, materialKind = 'toon', onClick, onPointe
     return [...byKind]
   }, [build])
 
+  const handBuilt = HAND_BUILT[build.layout.biome]
   return (
     <group>
-      {hasHandBuiltIsland(build.layout.biome) ? (
-        <JungleIsland litMaterial={getTerrainLitMaterial(materialKind)} softMaterial={getTerrainLitMaterial('lambert')} unlitMaterial={terrainUnlitMaterial} />
+      {handBuilt ? (
+        <HandBuiltIsland url={handBuilt.url} litMaterial={getTerrainLitMaterial(materialKind)} softMaterial={getTerrainLitMaterial('lambert')} unlitMaterial={terrainUnlitMaterial} />
       ) : (
         <>
           <mesh geometry={build.lit} material={getTerrainLitMaterial(materialKind)} raycast={() => null} />
@@ -58,7 +59,7 @@ export function TerracedIsland({ build, materialKind = 'toon', onClick, onPointe
         </>
       )}
       <mesh ref={hullRef} geometry={build.hull} material={hullMaterial} onClick={onClick} onPointerOver={onPointerOver} onPointerOut={onPointerOut} />
-      {hasHandBuiltIsland(build.layout.biome) ? null : groups.map(([kind, placements]) => (
+      {handBuilt ? null : groups.map(([kind, placements]) => (
         <PropPart key={kind} geometry={getPropGeometry(kind, build.layout.biome)} material={getPropMaterial(materialKind)} placements={placements} />
       ))}
     </group>

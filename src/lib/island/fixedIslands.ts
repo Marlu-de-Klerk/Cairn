@@ -1,14 +1,23 @@
 import type { Biome } from './types'
 
-/** Jungle renders one hand-built island (public/models/JungleIsland.glb) for every goal, built on this layout seed. */
-export const JUNGLE_ISLAND_SEED = 1
+export interface HandBuiltIsland {
+  /** layout seed the Blender model was built on (scripts/blender/<biome>_island.py) */
+  readonly seed: number
+  /** packed model under public/ (npm run island:pack) */
+  readonly url: string
+}
+
+/** Biomes that render one hand-built island for every goal, built on a fixed layout seed. */
+export const HAND_BUILT: Partial<Record<Biome, HandBuiltIsland>> = {
+  jungle: { seed: 1, url: '/models/JungleIsland.glb' },
+}
 
 /** Biomes that render a hand-built model instead of the procedural terrain and props. */
 export function hasHandBuiltIsland(biome: Biome): boolean {
-  return biome === 'jungle'
+  return HAND_BUILT[biome] !== undefined
 }
 
 /** The layout seed an island uses: fixed for biomes with a hand-built island, otherwise derived from the goal. */
 export function islandLayoutSeed(biome: Biome, goalSeed: number): number {
-  return hasHandBuiltIsland(biome) ? JUNGLE_ISLAND_SEED : goalSeed
+  return HAND_BUILT[biome]?.seed ?? goalSeed
 }

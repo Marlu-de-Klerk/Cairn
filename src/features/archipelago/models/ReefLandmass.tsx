@@ -2,7 +2,7 @@
 // `npm run assets:process -- assets-raw/reef/landmass.glb public/models ReefLandmass`
 // (scripts/process-asset.mjs) — node/material names below are copied from that
 // scaffold's generated GLTFResult type, not guessed. Same source geometry as
-// DesertLandmass (Kenney's platform_beach.glb, see ASSETS.md), tinted turquoise
+// the retired DesertLandmass (Kenney's platform_beach.glb, see ASSETS.md), tinted turquoise
 // by the consumer via getBiomePalette.
 import { forwardRef, useMemo } from 'react'
 import { useGLTF } from '@react-three/drei'

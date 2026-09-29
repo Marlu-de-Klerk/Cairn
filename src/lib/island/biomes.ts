@@ -213,7 +213,7 @@ export const BIOME_TERRAIN: Record<Biome, BiomeTerrainConfig> = {
 }
 
 export function isTerraced(biome: Biome): boolean {
-  return biome === 'jungle'
+  return biome === 'jungle' || biome === 'desert'
 }
 
 export function propRule(biome: Biome, kind: PropKind): PropRule | undefined {

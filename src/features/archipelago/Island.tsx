@@ -13,8 +13,6 @@ import { useIslandBuild } from './terrain/islandCache'
 import type { LitMaterialKind } from './terrain/materials'
 import { TerracedIsland } from './TerracedIsland'
 import { useHullRegistry } from './hullRegistry'
-import { DesertLandmass } from './models/DesertLandmass'
-import { DesertProps } from './models/DesertProps'
 import { HighlandsLandmass } from './models/HighlandsLandmass'
 import { HighlandsProps } from './models/HighlandsProps'
 import { ReefLandmass } from './models/ReefLandmass'
@@ -24,25 +22,23 @@ import { TundraProps } from './models/TundraProps'
 import { VolcanoLandmass } from './models/VolcanoLandmass'
 import { VolcanoProps } from './models/VolcanoProps'
 
-type LegacyBiome = Exclude<Goal['biome'], 'jungle'>
+type LegacyBiome = Exclude<Goal['biome'], 'jungle' | 'desert'>
 
-const LANDMASS_COMPONENTS: Record<LegacyBiome, typeof DesertLandmass> = {
-  desert: DesertLandmass,
+const LANDMASS_COMPONENTS: Record<LegacyBiome, typeof TundraLandmass> = {
   tundra: TundraLandmass,
   volcano: VolcanoLandmass,
   reef: ReefLandmass,
   highlands: HighlandsLandmass,
 }
 
-const PROPS_COMPONENTS: Record<LegacyBiome, typeof DesertProps> = {
-  desert: DesertProps,
+const PROPS_COMPONENTS: Record<LegacyBiome, typeof TundraProps> = {
   tundra: TundraProps,
   volcano: VolcanoProps,
   reef: ReefProps,
   highlands: HighlandsProps,
 }
 
-const PROP_COUNT_BY_BIOME: Record<LegacyBiome, number> = { desert: 6, tundra: 5, volcano: 4, reef: 8, highlands: 7 }
+const PROP_COUNT_BY_BIOME: Record<LegacyBiome, number> = { tundra: 5, volcano: 4, reef: 8, highlands: 7 }
 
 // Legacy GLTF biomes only (retired in the next plan): their Kenney platforms are authored at 0.447 half-width, so
 // 4.4x restores a ~1.97 footprint, with the label, hover card and hover lift tuned to that 0.365-tall platform.
