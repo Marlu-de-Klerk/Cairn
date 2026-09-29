@@ -3,7 +3,9 @@ import type { Biome, IslandLayout } from '../../../lib/island/types'
 import { LAYOUT_VERSION } from '../../../lib/island/types'
 import { buildIslandLayout } from '../../../lib/island/plan'
 import { propRule } from '../../../lib/island/biomes'
-import { buildTerrain } from './terraceMesh'
+import { BufferGeometry } from 'three'
+import { buildHull, buildTerrain } from './terraceMesh'
+import { hasHandBuiltIsland } from '../../../lib/island/fixedIslands'
 import type { IslandDetail, TerrainMeshes } from './terraceMesh'
 import { getPropGeometry } from './propGeometry'
 
@@ -55,9 +57,11 @@ export function getIslandBuild(biome: Biome, seed: number, detail: IslandDetail)
   }
   const t0 = performance.now()
   const layout = getIslandLayout(biome, seed)
-  const terrain = buildTerrain(layout, detail)
+  // A hand-built island draws its own model (models/JungleIsland.tsx); only the hull comes from the layout.
+  const handBuilt = hasHandBuiltIsland(biome)
+  const terrain = handBuilt ? { lit: new BufferGeometry(), unlit: new BufferGeometry(), hull: buildHull(layout) } : buildTerrain(layout, detail)
   let props = 0
-  for (const p of layout.props) {
+  for (const p of handBuilt ? [] : layout.props) {
     if (detail !== 'focus' && !propRule(biome, p.kind)?.overview) continue
     props += getPropGeometry(p.kind, biome).getAttribute('position').count / 3
   }
@@ -66,7 +70,7 @@ export function getIslandBuild(biome: Biome, seed: number, detail: IslandDetail)
     layout,
     detail,
     buildMs: performance.now() - t0,
-    triangles: { lit: terrain.lit.getAttribute('position').count / 3, unlit: terrain.unlit.getAttribute('position').count / 3, props },
+    triangles: { lit: (terrain.lit.getAttribute('position')?.count ?? 0) / 3, unlit: (terrain.unlit.getAttribute('position')?.count ?? 0) / 3, props },
   }
   builds.set(key, { build, refs: 1 })
   evict()

@@ -556,11 +556,20 @@ function hull(ctx: Ctx): BufferGeometry {
   return g
 }
 
-/** Pure: layout → { lit, unlit, hull } (spec §3.8). Non-indexed, so computeVertexNormals gives flat shading. */
-export function buildTerrain(layout: IslandLayout, detail: IslandDetail): TerrainMeshes {
+function context(layout: IslandLayout): Ctx {
   const cfg = BIOME_TERRAIN[layout.biome]
   const n = valueNoise2(layout.seed, 310)
-  const ctx: Ctx = { layout, palette: cfg.palette, cliff: cfg.cliff, top: layout.levels.length - 1, noise: (x, z) => 2 * n(x, z) - 1, normals: new Map() }
+  return { layout, palette: cfg.palette, cliff: cfg.cliff, top: layout.levels.length - 1, noise: (x, z) => 2 * n(x, z) - 1, normals: new Map() }
+}
+
+/** Only the pointer/occlusion hull, for islands whose visible mesh is a hand-built model. */
+export function buildHull(layout: IslandLayout): BufferGeometry {
+  return hull(context(layout))
+}
+
+/** Pure: layout → { lit, unlit, hull } (spec §3.8). Non-indexed, so computeVertexNormals gives flat shading. */
+export function buildTerrain(layout: IslandLayout, detail: IslandDetail): TerrainMeshes {
+  const ctx = context(layout)
   const lit = new Builder()
   const unlit = new Builder()
   slice(ctx, lit, CELL[detail])
