@@ -156,6 +156,8 @@ export const BIOME_TERRAIN: Record<Biome, BiomeTerrainConfig> = {
   },
   desert: {
     ...JUNGLE_TERRAIN,
+    // The hand-built desert has no waterfall or vines; its oasis sits on the lawn pool's spot.
+    features: { shelf: JUNGLE_TERRAIN.features.shelf, pool: 'lagoon', cave: true, pillars: 4, vines: 0, waterRocks: 5, camp: true },
     props: stubProps('cactus', 'bush'),
     palette: palette(
       {

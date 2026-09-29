@@ -12,6 +12,9 @@ export const HAND_BUILT: Partial<Record<Biome, HandBuiltIsland>> = {
   jungle: { seed: 1, url: '/models/JungleIsland.glb' },
 }
 
+/** Desert's hand-built island is built on this layout (widest lawn for dunes and the oasis, camp in view). */
+export const DESERT_ISLAND_SEED = 48
+
 /** Biomes that render a hand-built model instead of the procedural terrain and props. */
 export function hasHandBuiltIsland(biome: Biome): boolean {
   return HAND_BUILT[biome] !== undefined
