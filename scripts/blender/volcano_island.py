@@ -291,7 +291,7 @@ def summit_cone(ground, sink, unlit, keep_out):
     smoke_plume(sink, frame(x, z, foot + height - 0.05, 0.4), rng)
     keep_out.append((x, z, base * 0.7))
     print('cone', round(base, 2), round(height, 2), round(x, 2), round(z, 2))
-    return (x, z, foot + height, crater_r)
+    return (x, z, foot, height, base, crater_r)
 
 
 def lava_cracks(ground, unlit):
@@ -354,27 +354,61 @@ def lava_pool(unlit, sink, x, z, y, r):
         sink.blob(frame(x + math.cos(a) * r * 0.5, z + math.sin(a) * r * 0.5, y + 0.05 + 0.04 * k), (0, 0, 0), 0.03 + 0.012 * k, col(VO['steam']), col('#E3E3E0'), col('#C9C9C6'), subdiv=1, squash=0.8, jitter=0.1, seed=k, smooth=True)
 
 
+def cone_flow(ground, unlit, cone):
+    """Lava spilling from the crater lip straight down the cone's own flank, then on across the ground and over the
+    island's edge into the sea, on the side of the cone whose route stays clearest of the trail."""
+    x, z, foot, height, base, crater_r = cone
+    lip = crater_r * 1.15
+    best = None
+    for k in range(48):
+        a = 2 * math.pi * k / 48
+        dx, dz = math.cos(a), math.sin(a)
+        fx, fz = x + dx * base, z + dz * base
+        gy, _ = ground.at(fx, fz)
+        if gy is None:
+            continue
+        clear, length, px, pz = 9.0, 0.0, fx, fz
+        while True:  # walk from the foot to the sea along the same direction
+            nx, nz = px + dx * 0.02, pz + dz * 0.02
+            g2, _ = ground.at(nx, nz)
+            if g2 is None:
+                break
+            clear = min(clear, ground.trail_distance(nx, nz, -1.0))
+            px, pz, length = nx, nz, length + 0.02
+        if clear < HW + 0.12:
+            continue
+        score = -length - 0.5 * dz  # a short run to the sea, preferably round the back
+        if best is None or score > best[0]:
+            best = (score, a)
+    if not best:
+        print('cone flow', None)
+        return
+    a = best[1]
+    dx, dz = math.cos(a), math.sin(a)
+    # down the flank, following the cone's profile, a little proud of its surface
+    steps = 14
+    prev = None
+    for k in range(steps + 1):
+        u = k / steps
+        d = lip + (base - lip) * u
+        t = 1 - ((d - lip) / (base - lip)) ** (1 / 3) if d > lip else 1.0
+        y = foot + 0.02 + height * t + 0.012
+        w = 0.022 + 0.03 * u
+        pt = (x + dx * d, y, z + dz * d, w)
+        if prev:
+            (ax, ay, az, aw), (bx, by, bz, bw) = prev, pt
+            q = [P(ax - dz * aw, ay, az + dx * aw), P(ax + dz * aw, ay, az - dx * aw), P(bx + dz * bw, by, bz - dx * bw), P(bx - dz * bw, by, bz + dx * bw)]
+            unlit.face(Matrix.Identity(4), [tuple(v) for v in q], col(VO['lavaHot']) if k % 3 == 1 else col(VO['lava']), double=True)
+        prev = pt
+    cascade(ground, unlit, x + dx * (base - 0.02), z + dz * (base - 0.02), dx, dz)
+    print('cone flow', round(math.degrees(a)))
+
+
 def lava_falls(ground, sink, unlit, cone, keep_out):
-    """The layout's lava fall (down the back, from the cone's lip) and a second fall toward the camera from the tier
-    onto the lawn, into a glowing pool."""
-    fall = D['features']['fall']
-    if fall:
-        x, _, z = fall['samples'][0]
-        cascade(ground, unlit, x, z, fall['dir'][0], fall['dir'][1])
-        if cone:  # a tongue of lava from the crater lip down the cone to where the fall starts
-            cx, cz, cy, cr = cone
-            dx, dz = x - cx, z - cz
-            ln = math.hypot(dx, dz) or 1
-            dx, dz = dx / ln, dz / ln
-            for k in range(10):
-                t0, t1 = k / 10, (k + 1) / 10
-                ax, az = cx + dx * (cr + (ln - cr) * t0), cz + dz * (cr + (ln - cr) * t0)
-                bx, bz = cx + dx * (cr + (ln - cr) * t1), cz + dz * (cr + (ln - cr) * t1)
-                ay = cy - 0.02 - (cy - LEVEL_Y[SUMMIT]) * t0 ** 0.8 * 1.02
-                by = cy - 0.02 - (cy - LEVEL_Y[SUMMIT]) * t1 ** 0.8 * 1.02
-                w = 0.035
-                q = [P(ax - dz * w, ay + 0.012, az + dx * w), P(ax + dz * w, ay + 0.012, az - dx * w), P(bx + dz * w, by + 0.012, bz - dx * w), P(bx - dz * w, by + 0.012, bz + dx * w)]
-                unlit.face(Matrix.Identity(4), [tuple(v) for v in q], col(VO['lavaHot']) if k % 3 == 0 else col(VO['lava']), double=True)
+    """Lava from the crater down the cone to the sea, and a second fall toward the camera from the tier onto the
+    lawn, into a glowing pool."""
+    if cone:
+        cone_flow(ground, unlit, cone)
     pts = outline(TIER, 2)
     ns = outward_normals(pts)
     camp = [(p['x'], p['z']) for p in D['props'] if p['kind'] in ('tent', 'campfire')]
