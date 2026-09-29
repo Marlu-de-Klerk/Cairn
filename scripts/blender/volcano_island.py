@@ -198,7 +198,7 @@ def crater_cone(sink, unlit, M, base_r, height, crater_r):
     verts = []
     for k in range(rings + 1):
         t = k / rings
-        rad = crater_r * 1.15 + (base_r - crater_r * 1.15) * (1 - t) ** 2.2  # concave flanks, flaring at the foot
+        rad = crater_r * 1.15 + (base_r - crater_r * 1.15) * (1 - t) ** 3  # concave flanks, flaring at the foot
         ring = []
         for i in range(sides):
             a = 2 * math.pi * i / sides
@@ -223,6 +223,7 @@ def crater_cone(sink, unlit, M, base_r, height, crater_r):
                 gully = noise.noise(Vector((c.x * 5, c.y * 5, 0.3)))
                 rock = mix(basalt(c.x, c.z, -c.y), col(VO['ashDark']), smooth((0.5 - t) / 0.4) * 0.6)
                 rock = mix(rock, col(VO['rust']), smooth((gully - 0.3) / 0.2) * 0.5)
+                rock = mix(rock, col(VO['ashLight']), 0.35)  # the soft material shades darker than the toon walls
                 if k >= rings:
                     rock = mix(col(VO['lavaDeep']), col(VO['basaltDark']), 0.5)  # glowing inner wall
                 loop[layer] = rock
@@ -265,7 +266,7 @@ def summit_cone(ground, sink, unlit, keep_out):
         print('cone', None)
         return None
     _, x, z, base = max(cands)
-    height = (top - tier) + 0.6
+    height = (top - tier) + 0.45
     M = frame(x, z, tier - 0.02, rng.uniform(0, 6.3))
     crater_r = base * 0.3
     crater_cone(sink, unlit, M, base, height, crater_r)
@@ -447,12 +448,12 @@ KINDS = [
 
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    terrain = build_terrain(cone_offset, rings=24)
+    terrain = build_terrain(cone_offset, rings=32, step=1)
     carve_path(terrain)
     carve_caves(terrain)
     tessellate_tops(terrain, target=0.14)
     colour_terrain(terrain, vo_cap, vo_lip, vo_cliff)
-    smooth_shade(terrain)
+    smooth_shade(terrain, angle=65)  # the flared foot bends a lot; keep it one smooth surface
     ground = Ground(terrain)
     sink, unlit_sink = Sink(), Sink()
     keep_out = landmark_keep_out()
@@ -466,7 +467,7 @@ def main():
     path_stones(ground, sink)
     rim_fringe(ground, sink, dry_tuft)
     scatter(ground, sink, unlit_sink, KINDS, keep_out)
-    finish(terrain, sink, unlit_sink)
+    finish(terrain, sink, unlit_sink, sun_angle=20)  # soft shadows: the cone's shadow falls across coarse walls
 
 
 main()
