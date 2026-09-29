@@ -346,6 +346,44 @@ def grass(co):
     return mix(col(PAL['cap']), col(PAL['capLight']) if n > 0 else col(JUNGLE['leafLight']), min(1.0, abs(n) * 1.6))
 
 
+def path_test():
+    s = D['trail']['samples']
+    kd = nearest_trail()
+
+    def on_path(x, y, z, margin=0.035):
+        near = [(d, i) for _, i, d in kd.find_n(Vector((x, z, 0)), 12) if abs(s[i][1] - y) < 0.03]
+        return bool(near) and min(near)[0] < HW + margin
+
+    return on_path
+
+
+def tessellate_tops(terrain, target=0.16):
+    """Splits the big flat caps (not the path) into small triangles so baked shadows, AO and grass tint have vertices
+    to live on."""
+    on_path = path_test()
+    bm = bmesh.new()
+    bm.from_mesh(terrain.data)
+
+    def grass_face(f):
+        if f.normal.z <= 0.9:
+            return False
+        c = f.calc_center_median()
+        return c.z > LEVEL_Y[BEACH] + 0.03 and not on_path(c.x, c.z, -c.y, 0.06)
+
+    bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if grass_face(f) and len(f.verts) > 3], quad_method='BEAUTY', ngon_method='BEAUTY')
+    for _ in range(8):
+        grass_faces = [f for f in bm.faces if grass_face(f)]
+        long_edges = list({e for f in grass_faces for e in f.edges if e.calc_length() > target and all(grass_face(g) for g in e.link_faces)})
+        if not long_edges:
+            break
+        bmesh.ops.subdivide_edges(bm, edges=long_edges, cuts=1)
+        bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 3 and f.normal.z > 0.9], quad_method='BEAUTY', ngon_method='BEAUTY')
+    grass_faces = [f for f in bm.faces if grass_face(f)]
+    bmesh.ops.beautify_fill(bm, faces=grass_faces, edges=list({e for f in grass_faces for e in f.edges if all(grass_face(g) for g in e.link_faces)}))
+    bm.to_mesh(terrain.data)
+    bm.free()
+
+
 def colour_terrain(terrain):
     s = D['trail']['samples']
     kd = nearest_trail()
@@ -541,6 +579,9 @@ def canopy_tree(sink, M, h, r):
     top = Vector(pts[-1])
     shade, mid, lit = col(JUNGLE['deep']), col(JUNGLE['leaf']), col(JUNGLE['leafLight'])
     deep = col(JUNGLE['deep'], 0.85)
+    if r.random() < 0.1:  # an occasional flowering tree
+        bloom = r.choice(('#F29E8E', '#F4B55F', '#E88AA8'))
+        shade, mid, lit = col(bloom, 0.72), col(bloom, 0.88), col(bloom)
     k = 3
     for i in range(k):
         a = 2 * math.pi * i / k + r.uniform(-0.3, 0.3)
@@ -682,6 +723,8 @@ class Ground:
         s = D['trail']['samples']
         self.samples = s
         self.kd = nearest_trail()
+        # points the default camera must see: the trail, plus the camp
+        self.watched = [(p[0], p[1], p[2]) for p in s] + [(p['x'], p['y'] + 0.1, p['z']) for p in D['props'] if p['kind'] in ('tent', 'campfire')]
 
     def at(self, x, z):
         hit = self.bvh.ray_cast(P(x, 6, z), Vector((0, 0, -1)))
@@ -707,7 +750,7 @@ class Ground:
     def blocks_trail(self, x, z, y, h):
         """Default camera looks from layout +z, 38° down: would something h tall here hide a trail sample behind it?"""
         reach = (y + h) / math.tan(math.radians(38))
-        for sx, sy, sz, *_ in self.samples:
+        for sx, sy, sz in self.watched:
             if sz < z and abs(sx - x) < 0.22 and z - sz < (y + h - sy) / math.tan(math.radians(38)) + 0.05 and z - sz < reach:
                 return True
         return False
@@ -748,6 +791,64 @@ def seg_distance(x, z, x0, z0, x1, z1):
     vx, vz = x1 - x0, z1 - z0
     t = max(0.0, min(1.0, ((x - x0) * vx + (z - z0) * vz) / (vx * vx + vz * vz + 1e-12)))
     return math.hypot(x - (x0 + vx * t), z - (z0 + vz * t))
+
+
+def rim_fringe(ground, sink):
+    """Grass tufts along each terrace rim so edges read soft and overgrown rather than cut."""
+    for level in (LAWN, TIER, SUMMIT):
+        pts = outline(level, 2)
+        ns = outward_normals(pts)
+        y = LEVEL_Y[level]
+        for i in range(0, len(pts), 2 if level > LAWN else 3):
+            x, z = pts[i]
+            nx, nz = ns[i]
+            px, pz = x - nx * 0.035, z - nz * 0.035
+            if ground.trail_distance(px, pz, y) < HW + 0.06:
+                continue
+            gy, _ = ground.at(px, pz)
+            if gy is None or abs(gy - y) > 0.01:
+                continue
+            M = frame(px, pz, y - 0.004, rng.uniform(0, 2 * math.pi)) @ Matrix.Rotation(0.5, 4, 'X')
+            grass_tuft(sink, M, rng.uniform(0.05, 0.09), rng)
+
+
+def path_stones(ground, sink):
+    """Small stones along the path edges on the flat stretches."""
+    s = D['trail']['samples']
+    ns = normals_along()
+    for i in range(3, len(s) - 3, 4):
+        if s[i][4] >= 0 or rng.random() < 0.45:
+            continue
+        side = 1 if (i // 4) % 2 else -1
+        nx, nz = ns[i]
+        x, z = s[i][0] + nx * side * (HW + 0.025), s[i][2] + nz * side * (HW + 0.025)
+        gy, nzn = ground.at(x, z)
+        if gy is None or abs(gy - s[i][1]) > 0.02:
+            continue
+        sink.blob(frame(x, z, gy), (0, 0, 0.006), rng.uniform(0.018, 0.03), col(FOL['campfireStone']), col(FOL['campfireStone'], 0.88), col(FOL['campfireStone'], 0.75), subdiv=0, squash=0.55, jitter=0.15, seed=i)
+
+
+def beach_details(ground, sink):
+    pts = outline(BEACH, 4)
+    ns = outward_normals(pts)
+    made = 0
+    idx = list(range(len(pts)))
+    rng.shuffle(idx)
+    for i in idx:
+        if made >= 7:
+            break
+        x, z = pts[i]
+        nx, nz = ns[i]
+        px, pz = x - nx * 0.12, z - nz * 0.12
+        gy, _ = ground.at(px, pz)
+        if gy is None or abs(gy - LEVEL_Y[BEACH]) > 0.005 or ground.trail_distance(px, pz, gy) < 0.3:
+            continue
+        yaw = math.atan2(nz, nx) + rng.uniform(-0.6, 0.6)
+        if made % 3 == 0:
+            log(sink, frame(px, pz, gy - 0.03, yaw), 0.07, rng)  # driftwood
+        else:
+            rock(sink, frame(px, pz, gy - 0.01), rng.uniform(0.06, 0.11), rng, moss=False)
+        made += 1
 
 
 def scatter(ground, sink, unlit):
@@ -1012,6 +1113,66 @@ def vines(ground, sink):
                 sink.face(M, [tuple(P(*leaf_base)), tuple(P(*(leaf_base + d * 0.5 + w))), tuple(P(*tip)), tuple(P(*(leaf_base + d * 0.5 - w)))],
                           col(FOL['vineLeaf']) if k % 3 else col(JUNGLE['leaf']), double=True)
 
+
+# ---------------------------------------------------------------------------------------------------------- lighting bake
+
+# The app's key light (orientation.ts SUN_DIR, world frame), brought into the island's local frame (ISLAND_YAW = π/4).
+SUN_WORLD = Vector((-0.2, 0.8, 0.55)).normalized()
+
+
+def sun_local_blender():
+    yaw = -math.pi / 4
+    x, y, z = SUN_WORLD
+    lx, lz = x * math.cos(yaw) + z * math.sin(yaw), -x * math.sin(yaw) + z * math.cos(yaw)
+    return P(lx, y, lz).normalized()
+
+
+def bake_attribute(ob, kind, name, samples):
+    me = ob.data
+    attr = me.color_attributes.new(name, 'FLOAT_COLOR', 'CORNER')
+    me.color_attributes.active_color = attr
+    scene = bpy.context.scene
+    scene.cycles.samples = samples
+    with bpy.context.temp_override(object=ob, active_object=ob, selected_objects=[ob], selected_editable_objects=[ob]):
+        bpy.ops.object.bake(type=kind, target='VERTEX_COLORS')
+    return [tuple(d.color) for d in me.color_attributes[name].data]
+
+
+def bake_lighting(ob):
+    """Bakes ambient occlusion and the sun's cast shadows into the vertex colours, so the island keeps soft contact
+    shading and tree shadows under the app's single toon material."""
+    scene = bpy.context.scene
+    scene.render.engine = 'CYCLES'
+    scene.cycles.device = 'CPU'
+    scene.world = bpy.data.worlds.new('bakeWorld')
+    scene.world.light_settings.distance = 0.35
+    mat = bpy.data.materials.new('bake')
+    mat.use_nodes = True
+    ob.data.materials.append(mat)
+    for o in bpy.data.objects:
+        o.select_set(o is ob)
+    bpy.context.view_layer.objects.active = ob
+    ao = bake_attribute(ob, 'AO', 'AO', 48)
+    sun = bpy.data.lights.new('sun', 'SUN')
+    sun.angle = math.radians(4)
+    sun_ob = bpy.data.objects.new('sun', sun)
+    scene.collection.objects.link(sun_ob)
+    sun_ob.rotation_euler = sun_local_blender().to_track_quat('Z', 'Y').to_euler()
+    shadow = bake_attribute(ob, 'SHADOW', 'Shadow', 24)
+    me = ob.data
+    base = me.color_attributes['Col'].data
+    for i, d in enumerate(base):
+        a = ao[i][0]
+        sh = shadow[i][0]
+        k = (0.3 + 0.7 * a) * (0.62 + 0.38 * sh)
+        c = d.color
+        d.color = (c[0] * k, c[1] * k, c[2] * k, 1.0)
+    for name in ('AO', 'Shadow'):
+        me.color_attributes.remove(me.color_attributes[name])
+    me.color_attributes.active_color = me.color_attributes['Col']
+    me.materials.clear()
+    bpy.data.objects.remove(sun_ob)
+
 # ---------------------------------------------------------------------------------------------------------- main
 
 def main():
@@ -1019,6 +1180,7 @@ def main():
     terrain = build_terrain()
     carve_path(terrain)
     carve_caves(terrain)
+    tessellate_tops(terrain)
     colour_terrain(terrain)
     ground = Ground(terrain)
     sink, unlit_sink = Sink(), Sink()
@@ -1026,6 +1188,9 @@ def main():
     pillars_and_rocks(sink, unlit_sink)
     waterfalls(ground, sink, unlit_sink)
     vines(ground, sink)
+    path_stones(ground, sink)
+    beach_details(ground, sink)
+    rim_fringe(ground, sink)
     scatter(ground, sink, unlit_sink)
     lit = [terrain, to_object(sink.bm, 'props')]
     unlit = build_water() + [to_object(unlit_sink.bm, 'unlitProps')]
@@ -1039,6 +1204,7 @@ def main():
         group[0].data.name = name
         for o in bpy.context.selected_objects:
             o.select_set(False)
+    bake_lighting(bpy.data.objects['Lit'])
     for ob in bpy.data.objects:
         ob.data.color_attributes.active_color = ob.data.color_attributes['Col']
     bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', export_vertex_color='ACTIVE', export_materials='NONE', export_yup=True)
