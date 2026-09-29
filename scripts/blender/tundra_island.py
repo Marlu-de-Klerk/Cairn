@@ -188,7 +188,9 @@ def log_cabin(sink, unlit, M, r):
 
 def peak(sink, M, height, base, r):
     """A jagged granite horn: noisy stacked rings rising to a point, snow above the shoulder and in the gullies."""
-    rings, sides = 9, 14
+    rings, sides = 16, 24
+    bm = sink.soft
+    layer = bm.loops.layers.float_color['Col']
     verts = []
     for k in range(rings):
         t = k / (rings - 1)
@@ -198,26 +200,29 @@ def peak(sink, M, height, base, r):
             a = 2 * math.pi * i / sides
             jag = 1 + 0.3 * noise.noise(Vector((math.cos(a) * 2.5, math.sin(a) * 2.5, t * 3 + 1.3)))
             lean = Vector((0.12 * base * t, 0.08 * base * t, 0))
-            ring.append(sink.bm.verts.new(M @ (Vector((math.cos(a) * rad * jag, math.sin(a) * rad * jag, height * t - 0.03)) + lean)))
+            ring.append(bm.verts.new(M @ (Vector((math.cos(a) * rad * jag, math.sin(a) * rad * jag, height * t - 0.03)) + lean)))
         verts.append(ring)
-    tip = sink.bm.verts.new(M @ Vector((0.14 * base, 0.1 * base, height + 0.04)))
+    tip = bm.verts.new(M @ Vector((0.14 * base, 0.1 * base, height + 0.04)))
     base_z = (M @ Vector((0, 0, -0.03))).z
     for k in range(rings - 1):
         for i in range(sides):
             j = (i + 1) % sides
-            f = sink.bm.faces.new((verts[k][i], verts[k][j], verts[k + 1][j], verts[k + 1][i]))
+            f = bm.faces.new((verts[k][i], verts[k][j], verts[k + 1][j], verts[k + 1][i]))
             f.normal_update()
+            f.smooth = True
             for loop in f.loops:
                 c = loop.vert.co
                 t = (c.z - base_z) / height
                 gully = noise.noise(Vector((c.x * 6, c.y * 6, 0.7)))
                 rock = granite(c.x, c.z, -c.y)
-                snow = max(smooth((t - 0.4) / 0.15), smooth((gully - 0.2) / 0.2) * smooth((t - 0.12) / 0.15))
-                loop[sink.layer] = mix(rock, snow_colour(c.x, -c.y, -0.2 if f.normal.x < 0 else 0.2), snow)
+                snow = max(smooth((t - 0.3) / 0.15), smooth((gully - 0.15) / 0.2) * smooth((t - 0.1) / 0.15))
+                rock = mix(rock, col(SNOW['graniteLit']), 0.4)  # the soft material shades darker than the toon cliffs
+                loop[layer] = mix(rock, col(SNOW['snowLight']), snow)
     for i in range(sides):
-        f = sink.bm.faces.new((verts[-1][i], verts[-1][(i + 1) % sides], tip))
+        f = bm.faces.new((verts[-1][i], verts[-1][(i + 1) % sides], tip))
+        f.smooth = True
         for loop in f.loops:
-            loop[sink.layer] = col(SNOW['snowLight'])
+            loop[layer] = col(SNOW['snowLight'])
 
 
 # ---------------------------------------------------------------------------------------------------------- placement
@@ -396,13 +401,21 @@ KINDS = [
 ]
 
 
+def smooth_shade(ob, angle=40):
+    """Smooth normals across the rounded walls, but keep a crisp edge where a wall meets a terrace top."""
+    for poly in ob.data.polygons:
+        poly.use_smooth = True
+    ob.data.set_sharp_from_angle(angle=math.radians(angle))
+
+
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    terrain = build_terrain(granite_offset, rings=16)
+    terrain = build_terrain(granite_offset, rings=26)
     carve_path(terrain)
     carve_caves(terrain)
     tessellate_tops(terrain, target=0.14)
     colour_terrain(terrain, tundra_cap, tundra_lip, tundra_cliff)
+    smooth_shade(terrain)
     ground = Ground(terrain)
     sink, unlit_sink = Sink(), Sink()
     keep_out = landmark_keep_out()
