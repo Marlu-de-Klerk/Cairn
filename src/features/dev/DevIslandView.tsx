@@ -10,7 +10,6 @@ import { HullRegistryProvider } from '../archipelago/hullRegistry'
 import { devGoal, fixtureEntries, fixtureMilestones } from './fixtures'
 import { TrailView } from '../roadmap/RoadmapTrail'
 import { getIslandBuild, getIslandLayout, releaseIslandBuild } from '../archipelago/terrain/islandCache'
-import { isTerraced } from '../../lib/island/biomes'
 import { ISLAND_YAW } from '../../lib/island/orientation'
 import { islandPosition } from '../../lib/archipelago'
 import { CameraRig } from '../archipelago/CameraRig'
@@ -46,7 +45,7 @@ function StatsProbe({ out }: { out: RefObject<HTMLPreElement | null> }) {
 function useBuildStats(biome: Goal['biome'], params: DevParams, out: RefObject<HTMLPreElement | null>) {
   useEffect(() => {
     if (!out.current) return
-    if (params.view === 'overview' || !isTerraced(biome)) {
+    if (params.view === 'overview') {
       out.current.dataset.build = ''
       return
     }
@@ -90,11 +89,9 @@ export function DevIslandView() {
             ) : (
               <>
                 <Island goal={goal} onClick={() => undefined} seedOverride={params.seed} materialKind={params.material} focused />
-                {isTerraced(biome) ? (
-                  <group rotation={[0, ISLAND_YAW, 0]}>
-                    <TrailView goal={goal} layout={getIslandLayout(biome, islandLayoutSeed(biome, params.seed))} milestones={milestones} entries={entries} />
-                  </group>
-                ) : null}
+                <group rotation={[0, ISLAND_YAW, 0]}>
+                  <TrailView goal={goal} layout={getIslandLayout(biome, islandLayoutSeed(biome, params.seed))} milestones={milestones} entries={entries} />
+                </group>
               </>
             )}
           </Suspense>

@@ -7,14 +7,13 @@ import { entrySide, entryTs, milestoneTs, progressT } from '../../lib/trail'
 import type { TrailGoal, TrailMilestone } from '../../lib/trail'
 import { hashGoalId } from '../../lib/theme'
 import { islandLayoutSeed } from '../../lib/island/fixedIslands'
-import { SHARED_PALETTE, isTerraced } from '../../lib/island/biomes'
+import { SHARED_PALETTE } from '../../lib/island/biomes'
 import type { IslandLayout } from '../../lib/island/types'
 import type { Goal } from '../archipelago/api'
 import { getIslandLayout } from '../archipelago/terrain/islandCache'
 import { useMilestones, useProgressEntries } from './api'
 import type { Milestone, ProgressEntry } from './api'
 import { TRAIL_CLEARANCE, buildTrailCurve, buildTrailRibbon, groundedOffset, positionAt } from './curve'
-import { LegacyRoadmapTrail } from './LegacyRoadmapTrail'
 import { MilestoneCairn } from './MilestoneCairn'
 import type { CairnState } from './MilestoneCairn'
 import { TrailPennant } from './TrailPennant'
@@ -44,13 +43,8 @@ export interface TrailViewProps {
   readonly entries: ProgressEntry[]
 }
 
-/** Data container: hooks and the layout lookup. The five legacy biomes keep the old spiral until the next plan. */
+/** Data container: hooks and the layout lookup. */
 export function RoadmapTrail({ goal, seedOverride }: { goal: Goal; seedOverride?: number }) {
-  if (!isTerraced(goal.biome)) return <LegacyRoadmapTrail goal={goal} />
-  return <TerracedRoadmapTrail goal={goal} seedOverride={seedOverride} />
-}
-
-function TerracedRoadmapTrail({ goal, seedOverride }: { goal: Goal; seedOverride?: number }) {
   const { data: milestones, isError: milestonesError } = useMilestones(goal.id)
   const { data: entries, isError: entriesError } = useProgressEntries(goal.id)
   const layout = useMemo(() => getIslandLayout(goal.biome, islandLayoutSeed(goal.biome, seedOverride ?? hashGoalId(goal.id))), [goal.biome, goal.id, seedOverride])

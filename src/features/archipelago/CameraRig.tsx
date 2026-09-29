@@ -3,7 +3,6 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { Vector3 } from 'three'
 import type { PerspectiveCamera } from 'three'
 import type { Goal } from './api'
-import { isTerraced } from '../../lib/island/biomes'
 import { focusPose } from '../../lib/island/anchors'
 import { hashGoalId } from '../../lib/theme'
 import { islandLayoutSeed } from '../../lib/island/fixedIslands'
@@ -13,12 +12,6 @@ const ORBIT_RADIUS = 30
 const ORBIT_ELEVATION = (35 * Math.PI) / 180 // spec §6.1: "looking down at maybe 35°"
 const ORBIT_SPEED = 0.05 // radians/second while idle
 const DRAG_SENSITIVITY = 0.005 // radians per pixel of horizontal drag
-// Old ratio was distance 8 against the pre-M4 cone's footprint radius 2 (4x).
-// Applying the same 4x to the real island footprint (radius about 1.97 post
-// Island.tsx's ISLAND_SCALE — see that file's comment) keeps the detail-view
-// framing proportionate to the actual, much smaller mesh.
-const ISLAND_APPROACH_DISTANCE = 7.88
-const ISLAND_APPROACH_ELEVATION = (40 * Math.PI) / 180
 const FLY_DURATION = 1.2 // seconds, spec §6.3
 const DRAG_CLICK_THRESHOLD = 5 // px of travel past which a gesture is a drag, not a click
 const PANEL_WIDTH_PX = 288 // RoadmapPanel's w-72
@@ -33,14 +26,6 @@ function orbitPosition(azimuth: number): Vector3 {
     ORBIT_RADIUS * Math.cos(ORBIT_ELEVATION) * Math.cos(azimuth),
     ORBIT_RADIUS * Math.sin(ORBIT_ELEVATION),
     ORBIT_RADIUS * Math.cos(ORBIT_ELEVATION) * Math.sin(azimuth),
-  )
-}
-
-function islandApproachPosition(goal: { islandX: number; islandZ: number }): Vector3 {
-  return new Vector3(
-    goal.islandX + ISLAND_APPROACH_DISTANCE * Math.cos(ISLAND_APPROACH_ELEVATION),
-    ISLAND_APPROACH_DISTANCE * Math.sin(ISLAND_APPROACH_ELEVATION),
-    goal.islandZ + ISLAND_APPROACH_DISTANCE * Math.cos(ISLAND_APPROACH_ELEVATION),
   )
 }
 
@@ -156,7 +141,6 @@ export function CameraRig({ focusedGoal, initialAzimuth, seedOverride, devOrbit 
 
   useFrame((_, delta) => {
     const focusedGoalId = focusedGoal?.id ?? null
-    const terraced = focusedGoal !== null && isTerraced(focusedGoal.biome)
 
     // A transition begins the instant the focused goal's identity changes —
     // capture wherever the camera ACTUALLY is right now as the flight's
@@ -170,7 +154,7 @@ export function CameraRig({ focusedGoal, initialAzimuth, seedOverride, devOrbit 
     }
 
     const isTransitioning = transitionStart.current !== null
-    orbitEnabled.current = terraced && !isTransitioning && devOrbit === undefined
+    orbitEnabled.current = focusedGoal !== null && !isTransitioning && devOrbit === undefined
 
     // Auto-rotate only ever runs before the first interaction, ever — once
     // `hasInteracted` flips true (on the very first pointerdown, at the same
@@ -181,7 +165,7 @@ export function CameraRig({ focusedGoal, initialAzimuth, seedOverride, devOrbit 
 
     let desiredPosition: Vector3
     let desiredLookAt: Vector3
-    if (focusedGoal && terraced) {
+    if (focusedGoal) {
       const pose = focusPose(getIslandLayout(focusedGoal.biome, islandLayoutSeed(focusedGoal.biome, seedOverride ?? hashGoalId(focusedGoal.id))), {
         aspect: size.width / Math.max(1, size.height),
         fovDeg: (camera as PerspectiveCamera).fov,
@@ -192,9 +176,6 @@ export function CameraRig({ focusedGoal, initialAzimuth, seedOverride, devOrbit 
       const island = new Vector3(focusedGoal.islandX, 0, focusedGoal.islandZ)
       desiredPosition = island.clone().add(new Vector3(...pose.position))
       desiredLookAt = island.add(new Vector3(...pose.lookAt))
-    } else if (focusedGoal) {
-      desiredPosition = islandApproachPosition(focusedGoal)
-      desiredLookAt = new Vector3(focusedGoal.islandX, 0, focusedGoal.islandZ)
     } else {
       desiredPosition = orbitPosition(azimuth.current)
       desiredLookAt = new Vector3(0, 0, 0)
