@@ -191,6 +191,12 @@ export const BIOME_TERRAIN: Record<Biome, BiomeTerrainConfig> = {
   },
   reef: {
     ...JUNGLE_TERRAIN,
+    // Low and broad: two short coral-limestone steps over a wide beach, with a lagoon pool on the lawn.
+    tiers: [
+      { y: 0.6, radiusRatio: 0.68, drift: 0.7, ledge: { back: 0.28, front: 0.95 }, harmonicAmp: 0.1 },
+      { y: 1.2, radiusRatio: 0.6, drift: 0.35, ledge: { back: 0.3, front: 0.8 }, harmonicAmp: 0.1 },
+    ],
+    features: { shelf: JUNGLE_TERRAIN.features.shelf, pool: 'lagoon', cave: true, pillars: 3, vines: 0, waterRocks: 7, camp: true },
     props: stubProps('palm', 'coralPuff'),
     palette: palette(
       {
@@ -220,7 +226,7 @@ export const BIOME_TERRAIN: Record<Biome, BiomeTerrainConfig> = {
 }
 
 export function isTerraced(biome: Biome): boolean {
-  return biome === 'jungle' || biome === 'desert'
+  return biome === 'jungle' || biome === 'desert' || biome === 'reef'
 }
 
 export function propRule(biome: Biome, kind: PropKind): PropRule | undefined {

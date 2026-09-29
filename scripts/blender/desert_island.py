@@ -260,35 +260,6 @@ DATE_PALM = {'trunk': col('#9C7A55'), 'ring': col('#84633F'), 'frond': col('#5F9
              'nut': col('#C0703A'), 'nutDark': col('#8A4A2A')}
 
 
-def ribbed(sink, M, pts, radius, sides, light, dark, cap=None):
-    """A ribbed tube (star cross-section, alternating rib colours) through local points; radius is per point."""
-    rings = []
-    for i, p in enumerate(pts):
-        a = Vector(pts[min(i + 1, len(pts) - 1)]) - Vector(pts[max(i - 1, 0)])
-        a.normalize()
-        ref = Vector((1, 0, 0)) if abs(a.x) < 0.9 else Vector((0, 1, 0))
-        u = a.cross(ref).normalized()
-        v = a.cross(u).normalized()
-        ring = []
-        for k in range(sides * 2):
-            t = math.pi * k / sides
-            rr = radius[i] * (1.0 if k % 2 == 0 else 0.8)
-            ring.append(sink.bm.verts.new(M @ (Vector(p) + (u * math.cos(t) + v * math.sin(t)) * rr)))
-        rings.append(ring)
-    n = sides * 2
-    for i in range(len(rings) - 1):
-        for k in range(n):
-            f = sink.bm.faces.new((rings[i][k], rings[i][(k + 1) % n], rings[i + 1][(k + 1) % n], rings[i + 1][k]))
-            for loop in f.loops:
-                loop[sink.layer] = light if k % 2 == 0 else dark
-    if cap:
-        top = sink.bm.verts.new(M @ (Vector(pts[-1]) + (Vector(pts[-1]) - Vector(pts[-2])).normalized() * radius[-1] * 0.8))
-        for k in range(n):
-            f = sink.bm.faces.new((rings[-1][k], rings[-1][(k + 1) % n], top))
-            for loop in f.loops:
-                loop[sink.layer] = cap
-
-
 def saguaro(sink, M, h, r):
     rad = 0.04 * h / 0.45
     light, dark, lit = col(PLANT['cactus']), col(PLANT['cactusDark']), col(PLANT['cactusLit'])
@@ -415,14 +386,6 @@ def skull(sink, M, r):
         pts = [(x, -0.045, -0.004), (x + 0.004, -0.03, 0.03), (x + 0.006, 0.0, 0.042), (x + 0.004, 0.03, 0.03), (x, 0.045, -0.004)]
         sink.cyl(M, pts, [0.004] * 5, 4, [bone])
     sink.cyl(M, [(0.1, 0.0, 0.008), (0.24, 0.0, 0.01)], [0.006, 0.005], 5, [shade])  # spine
-
-
-def box(sink, M, lo, hi, top, side, bottom=None):
-    """Axis-aligned box in local frame between corners lo and hi."""
-    (x0, y0, z0), (x1, y1, z1) = lo, hi
-    v = [(x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0), (x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)]
-    for idx, c in (((4, 5, 6, 7), top), ((0, 1, 5, 4), side), ((1, 2, 6, 5), side), ((2, 3, 7, 6), side), ((3, 0, 4, 7), side), ((3, 2, 1, 0), bottom or side)):
-        sink.face(M, [v[i] for i in idx], c)
 
 
 def bedouin_tent(sink, M, r):
