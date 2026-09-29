@@ -583,6 +583,43 @@ def palm(sink, M, h, r, c):
         sink.blob(M, top + Vector((math.cos(a) * 0.025, math.sin(a) * 0.025, -0.02)), 0.02, c['nut'], c['nutDark'], c['nutDark'], subdiv=0, jitter=0.0)
 
 
+def ribbed(sink, M, pts, radius, sides, light, dark, cap=None):
+    """A ribbed tube (star cross-section, alternating rib colours) through local points; radius is per point."""
+    rings = []
+    for i, p in enumerate(pts):
+        a = Vector(pts[min(i + 1, len(pts) - 1)]) - Vector(pts[max(i - 1, 0)])
+        a.normalize()
+        ref = Vector((1, 0, 0)) if abs(a.x) < 0.9 else Vector((0, 1, 0))
+        u = a.cross(ref).normalized()
+        v = a.cross(u).normalized()
+        ring = []
+        for k in range(sides * 2):
+            t = math.pi * k / sides
+            rr = radius[i] * (1.0 if k % 2 == 0 else 0.8)
+            ring.append(sink.bm.verts.new(M @ (Vector(p) + (u * math.cos(t) + v * math.sin(t)) * rr)))
+        rings.append(ring)
+    n = sides * 2
+    for i in range(len(rings) - 1):
+        for k in range(n):
+            f = sink.bm.faces.new((rings[i][k], rings[i][(k + 1) % n], rings[i + 1][(k + 1) % n], rings[i + 1][k]))
+            for loop in f.loops:
+                loop[sink.layer] = light if k % 2 == 0 else dark
+    if cap:
+        top = sink.bm.verts.new(M @ (Vector(pts[-1]) + (Vector(pts[-1]) - Vector(pts[-2])).normalized() * radius[-1] * 0.8))
+        for k in range(n):
+            f = sink.bm.faces.new((rings[-1][k], rings[-1][(k + 1) % n], top))
+            for loop in f.loops:
+                loop[sink.layer] = cap
+
+
+def box(sink, M, lo, hi, top, side, bottom=None):
+    """Axis-aligned box in local frame between corners lo and hi."""
+    (x0, y0, z0), (x1, y1, z1) = lo, hi
+    v = [(x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0), (x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)]
+    for idx, c in (((4, 5, 6, 7), top), ((0, 1, 5, 4), side), ((1, 2, 6, 5), side), ((2, 3, 7, 6), side), ((3, 0, 4, 7), side), ((3, 2, 1, 0), bottom or side)):
+        sink.face(M, [v[i] for i in idx], c)
+
+
 def campfire(sink, unlit, M, r):
     for i in range(8):
         a = 2 * math.pi * i / 8

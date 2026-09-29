@@ -12,3 +12,4 @@ coverage
 !.claude/skills/
 assets-raw/*
 !assets-raw/.gitkeep
+__pycache__/
