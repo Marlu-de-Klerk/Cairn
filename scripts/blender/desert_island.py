@@ -1,6 +1,6 @@
 """Builds the hand-made desert island (public/models/DesertIsland.glb) in Blender from the exported layout.
 
-  npm run island:export -- desert 48
+  npm run island:export -- desert
   python scripts/blender/desert_island.py assets-raw/desert-layout.json assets-raw/DesertIsland.raw.glb   (bpy module)
   npm run island:pack -- desert
 
@@ -177,7 +177,7 @@ def dune(sink, x, z, y, length, width, height, yaw, seed):
 
 
 def place_dunes(ground, sink, keep_out, count=10):
-    """Dunes on the lawn, away from the path, the oasis, landmarks and the lawn rim."""
+    """Dunes on the lawn and drifts on the mesa top, away from the path, the oasis, landmarks and the rims."""
     pool = D['features']['pool']
     made = []
     for _ in range(1500):
@@ -185,7 +185,7 @@ def place_dunes(ground, sink, keep_out, count=10):
             break
         x, z = rng.uniform(-2.8, 2.8), rng.uniform(-2.8, 2.8)
         y, nz = ground.at(x, z)
-        if y is None or level_of(y) != 'lawn':
+        if y is None or level_of(y) not in ('lawn', 'tier'):
             continue
         length, width = rng.uniform(0.8, 1.3), rng.uniform(0.34, 0.5)
         yaw = -WIND + math.pi / 2 + rng.uniform(-0.35, 0.35)  # layout z is Blender -y, so angles flip
@@ -202,7 +202,7 @@ def place_dunes(ground, sink, keep_out, count=10):
             lx, lz = math.cos(t) * length / 2 * 0.85, math.sin(t) * width / 2 * 0.85
             px, pz = x + lx * math.cos(-yaw) - lz * math.sin(-yaw), z + lx * math.sin(-yaw) + lz * math.cos(-yaw)
             py, _ = ground.at(px, pz)
-            if py is None or py < LEVEL_Y[LAWN] - 0.005 or ground.trail_distance(px, pz, LEVEL_Y[LAWN]) < HW + 0.12:
+            if py is None or py < y - 0.005 or ground.trail_distance(px, pz, y) < HW + 0.12:
                 ok = False
                 break
         if not ok:

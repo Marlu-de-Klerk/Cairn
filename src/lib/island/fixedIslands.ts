@@ -10,8 +10,8 @@ export interface HandBuiltIsland {
 /** Biomes that render one hand-built island for every goal, built on a fixed layout seed. */
 export const HAND_BUILT: Partial<Record<Biome, HandBuiltIsland>> = {
   jungle: { seed: 1, url: '/models/JungleIsland.glb' },
-  // seed 48: the widest lawn for dunes and the oasis, with the camp in view
-  desert: { seed: 48, url: '/models/DesertIsland.glb' },
+  // seed 10: a clean butte on the mesa, room for the oasis, camp in view
+  desert: { seed: 10, url: '/models/DesertIsland.glb' },
 }
 
 /** Biomes that render a hand-built model instead of the procedural terrain and props. */

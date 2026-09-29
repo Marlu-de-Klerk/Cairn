@@ -157,6 +157,11 @@ export const BIOME_TERRAIN: Record<Biome, BiomeTerrainConfig> = {
   desert: {
     ...JUNGLE_TERRAIN,
     // The hand-built desert has no waterfall or vines; its oasis sits on the lawn pool's spot.
+    // A broad, low table mesa with a tall narrow butte rising near its middle, unlike the jungle's stacked massif.
+    tiers: [
+      { y: 0.95, radiusRatio: 0.8, drift: 0.2, ledge: { back: 0.3, front: 0.9 }, harmonicAmp: 0.08 },
+      { y: 1.95, radiusRatio: 0.5, drift: 0.25, ledge: { back: 0.25, front: 0.6 }, harmonicAmp: 0.08 },
+    ],
     features: { shelf: JUNGLE_TERRAIN.features.shelf, pool: 'lagoon', cave: true, pillars: 4, vines: 0, waterRocks: 5, camp: true },
     props: stubProps('cactus', 'bush'),
     palette: palette(
