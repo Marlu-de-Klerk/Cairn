@@ -237,43 +237,61 @@ def crater_cone(sink, unlit, M, base_r, height, crater_r):
 
 
 def summit_cone(ground, sink, unlit, keep_out):
-    """The crater cone stands on the tier behind the summit and rises well above it; the layout's lava fall starts
-    from its lip."""
-    top, tier = LEVEL_Y[SUMMIT], LEVEL_Y[TIER]
+    """The crater cone behind the summit. Its foot stands on the lawn, so its flanks run down into the mountain
+    instead of overhanging a ledge; it may bury terrain but never the trail, and never reaches past the island."""
+    top, tier, lawn = LEVEL_Y[SUMMIT], LEVEL_Y[TIER], LEVEL_Y[LAWN]
+    foot = lawn - 0.03
+    height = (top - foot) + 0.45
+    s_all = D['trail']['samples']
     pts = outline(SUMMIT, 2)
     ns = outward_normals(pts)
+
+    def surface(d, base, crater_r):
+        """Cone surface height at distance d from its axis (None outside the foot)."""
+        if d >= base:
+            return None
+        if d <= crater_r * 1.15:
+            return foot + height
+        t = 1 - ((d - crater_r * 1.15) / (base - crater_r * 1.15)) ** (1 / 3)
+        return foot + height * t
+
     cands = []
     for i, (x, z) in enumerate(pts):
         nx, nz = ns[i]
         if nz > -0.2:
             continue
-        for push in (0.1, 0.2, 0.3):
-            for base in (0.6, 0.52, 0.45, 0.38, 0.3):
-                cx, cz = x + nx * push, z + nz * push
-                if ground.trail_distance(cx, cz, tier - 0.4) < HW + base * 0.8 + 0.04:
-                    continue
+        for push in (0.0, 0.1, 0.2, 0.3):
+            cx, cz = x + nx * push, z + nz * push
+            for base in (1.1, 1.0, 0.9, 0.8, 0.7, 0.6):
+                crater_r = 0.18
                 ok = True
-                for k in range(12):
-                    a = 2 * math.pi * k / 12
-                    gy, _ = ground.at(cx + math.cos(a) * base * 0.7, cz + math.sin(a) * base * 0.7)
-                    if gy is None or gy < tier - 0.01:
+                for k in range(16):  # the foot must land on the island, not over the sea
+                    a = 2 * math.pi * k / 16
+                    gy, _ = ground.at(cx + math.cos(a) * base * 0.92, cz + math.sin(a) * base * 0.92)
+                    if gy is None or gy < lawn - 0.01:
                         ok = False
                         break
                 if ok:
-                    cands.append((base - 0.25 * cz, cx, cz, base))
+                    for q in s_all:  # the trail must stay above the cone's flanks
+                        d = math.hypot(q[0] - cx, q[2] - cz) - HW - 0.04
+                        h = surface(max(0.0, d), base, crater_r)
+                        if h is not None and h > q[1] - 0.03:
+                            ok = False
+                            break
+                if ok:
+                    cands.append((base - 0.2 * cz, cx, cz, base))
                     break
     if not cands:
         print('cone', None)
         return None
     _, x, z, base = max(cands)
-    height = (top - tier) + 0.45
-    M = frame(x, z, tier - 0.02, rng.uniform(0, 6.3))
-    crater_r = base * 0.3
+    crater_r = 0.18
+    M = frame(x, z, foot + 0.02, rng.uniform(0, 6.3))
     crater_cone(sink, unlit, M, base, height, crater_r)
-    smoke_plume(sink, frame(x, z, tier + height - 0.05, 0.4), rng)
-    keep_out.append((x, z, base + 0.1))
+    smoke_plume(sink, frame(x, z, foot + height - 0.05, 0.4), rng)
+    keep_out.append((x, z, base * 0.7))
     print('cone', round(base, 2), round(height, 2), round(x, 2), round(z, 2))
-    return (x, z, tier + height, crater_r)
+    return (x, z, foot + height, crater_r)
 
 
 def lava_cracks(ground, unlit):
