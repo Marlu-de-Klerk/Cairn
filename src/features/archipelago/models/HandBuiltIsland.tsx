@@ -5,7 +5,8 @@ import type { Biome } from '../../../lib/island/types'
 import { HAND_BUILT } from '../../../lib/island/fixedIslands'
 
 // Built by scripts/blender/<biome>_island.py on the biome's fixed layout seed (HAND_BUILT), packed by `npm run island:pack`.
-type GLTFResult = GLTF & { nodes: { Lit: Mesh; Soft: Mesh; Unlit: Mesh } }
+// Blender's exporter drops an empty mesh, so a biome without soft foliage has no Soft node.
+type GLTFResult = GLTF & { nodes: { Lit: Mesh; Soft?: Mesh; Unlit: Mesh } }
 
 interface HandBuiltIslandProps {
   readonly url: string
@@ -22,7 +23,7 @@ export function HandBuiltIsland({ url, litMaterial, softMaterial, unlitMaterial 
     <group>
       {/* meshopt quantisation stores each mesh's placement on its node, so the node transform must be kept */}
       <mesh geometry={nodes.Lit.geometry} material={litMaterial} position={nodes.Lit.position} scale={nodes.Lit.scale} raycast={() => null} />
-      <mesh geometry={nodes.Soft.geometry} material={softMaterial} position={nodes.Soft.position} scale={nodes.Soft.scale} raycast={() => null} />
+      {nodes.Soft ? <mesh geometry={nodes.Soft.geometry} material={softMaterial} position={nodes.Soft.position} scale={nodes.Soft.scale} raycast={() => null} /> : null}
       <mesh geometry={nodes.Unlit.geometry} material={unlitMaterial} position={nodes.Unlit.position} scale={nodes.Unlit.scale} raycast={() => null} />
     </group>
   )

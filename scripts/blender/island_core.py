@@ -918,7 +918,8 @@ def finish(terrain, sink, unlit_sink):
         for o in bpy.context.selected_objects:
             o.select_set(False)
     bake_lighting(bpy.data.objects['Lit'])
-    bake_lighting(soft, strength=0.6)
+    if soft.data.polygons:
+        bake_lighting(soft, strength=0.6)
     for ob in bpy.data.objects:
         ob.data.color_attributes.active_color = ob.data.color_attributes['Col']
     bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', export_vertex_color='ACTIVE', export_materials='NONE', export_yup=True)
