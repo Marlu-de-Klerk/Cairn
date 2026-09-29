@@ -541,13 +541,13 @@ def canopy_tree(sink, M, h, r):
     top = Vector(pts[-1])
     shade, mid, lit = col(JUNGLE['deep']), col(JUNGLE['leaf']), col(JUNGLE['leafLight'])
     deep = col(JUNGLE['deep'], 0.85)
-    k = r.randint(5, 7)
+    k = 3
     for i in range(k):
         a = 2 * math.pi * i / k + r.uniform(-0.3, 0.3)
-        rr = h * r.uniform(0.17, 0.24)
-        off = Vector((math.cos(a) * h * 0.2, math.sin(a) * h * 0.2, h * r.uniform(0.02, 0.14)))
-        sink.blob(M, top + off, rr, lit, mid, shade, squash=0.78, jitter=0.12, seed=r.uniform(0, 50), smooth=True)
-    sink.blob(M, top + Vector((0, 0, h * 0.24)), h * 0.24, lit, mid, deep, squash=0.8, jitter=0.12, seed=r.uniform(0, 50), smooth=True)
+        rr = h * r.uniform(0.22, 0.27)
+        off = Vector((math.cos(a) * h * 0.19, math.sin(a) * h * 0.19, h * r.uniform(0.03, 0.1)))
+        sink.blob(M, top + off, rr, lit, mid, shade, subdiv=2, squash=0.8, jitter=0.07, seed=r.uniform(0, 50), smooth=True)
+    sink.blob(M, top + Vector((0, 0, h * 0.25)), h * 0.27, lit, mid, deep, subdiv=2, squash=0.82, jitter=0.07, seed=r.uniform(0, 50), smooth=True)
 
 
 def broadleaf(sink, M, h, r):
@@ -571,11 +571,8 @@ def fern(sink, M, h, r):
 
 
 def bush(sink, M, h, r):
-    for i in range(r.randint(2, 3)):
-        a = r.uniform(0, 2 * math.pi)
-        rr = h * r.uniform(0.45, 0.6)
-        c = Vector((math.cos(a) * h * 0.35, math.sin(a) * h * 0.35, rr * 0.7))
-        sink.blob(M, c, rr, col(JUNGLE['leafLight']), col(FOL['bush']), col(JUNGLE['leaf']), squash=0.85, jitter=0.12, seed=r.uniform(0, 50), smooth=True)
+    rr = h * r.uniform(0.6, 0.75)
+    sink.blob(M, (0, 0, rr * 0.7), rr, col(JUNGLE['leafLight']), col(FOL['bush']), col(JUNGLE['leaf']), subdiv=2, squash=0.8, jitter=0.08, seed=r.uniform(0, 50), smooth=True)
 
 
 def grass_tuft(sink, M, h, r):
@@ -747,6 +744,12 @@ def level_of(y):
     return None
 
 
+def seg_distance(x, z, x0, z0, x1, z1):
+    vx, vz = x1 - x0, z1 - z0
+    t = max(0.0, min(1.0, ((x - x0) * vx + (z - z0) * vz) / (vx * vx + vz * vz + 1e-12)))
+    return math.hypot(x - (x0 + vx * t), z - (z0 + vz * t))
+
+
 def scatter(ground, sink, unlit):
     feats = D['features']
     keep_out = []  # (x, z, r)
@@ -781,6 +784,8 @@ def scatter(ground, sink, unlit):
             if name == 'palm' and lv == 'tier' and rng.random() < 0.7:
                 continue
             if any(math.hypot(x - kx, z - kz) < kr for kx, kz, kr in keep_out):
+                continue
+            if any(seg_distance(x, z, *st) < 0.13 for st in STREAMS):
                 continue
             if ground.trail_distance(x, z, y) < clear:
                 continue
@@ -870,62 +875,101 @@ def splash(unlit, x, z, y, r):
         unlit.face(Matrix.Identity(4), [tuple(P(px, y + 0.004 + 0.002 * k, pz)) for px, pz in pts][::-1], col(PAL['foam']))
 
 
+STREAMS = []  # (x0, z0, x1, z1): plants keep off these
+
+
+def stream(unlit, x0, z0, x1, z1, y, width=0.1):
+    STREAMS.append((x0, z0, x1, z1))
+    fall, streak = col(PAL['fall']), col(PAL['fallStreak'])
+    length = math.hypot(x1 - x0, z1 - z0)
+    if length < 1e-3:
+        return
+    dx, dz = (x1 - x0) / length, (z1 - z0) / length
+    nx, nz = -dz * width / 2, dx * width / 2
+    steps = max(1, int(length / 0.08))
+    for k in range(steps):
+        a, b = k / steps, (k + 1) / steps
+        ax, az, bx, bz = x0 + (x1 - x0) * a, z0 + (z1 - z0) * a, x0 + (x1 - x0) * b, z0 + (z1 - z0) * b
+        q = [P(ax + nx, y, az + nz), P(ax - nx, y, az - nz), P(bx - nx, y, bz - nz), P(bx + nx, y, bz + nz)]
+        unlit.face(Matrix.Identity(4), [tuple(v) for v in q], streak if k % 3 == 0 else fall, double=True)
+
+
+def cascade(ground, unlit, x, z, dx, dz):
+    """Water that follows the terrain from (x, z) along (dx, dz): a stream across each flat level, a fall down each
+    drop, until it reaches the sea."""
+    length = math.hypot(dx, dz) or 1
+    dx, dz = dx / length, dz / length
+    y, _ = ground.at(x, z)
+    step = 0.02
+    for _ in range(12):
+        # walk the stream to the edge of the current level
+        sx, sz = x, z
+        while True:
+            ny, _ = ground.at(x + dx * step, z + dz * step)
+            if ny is None or ny < y - 0.02:
+                break
+            x, z = x + dx * step, z + dz * step
+        stream(unlit, sx, sz, x, z, y + 0.004)
+        ny, _ = ground.at(x + dx * 0.08, z + dz * 0.08)
+        lower = WATER_LEVEL if ny is None else ny
+        # the fall hugs the wall: find the wall surface at each height, just outside it
+        pts = []
+        for k in range(7):
+            yy = y - (y - lower) * k / 6
+            w = ground.wall_point(x, min(yy, y - 0.005), z, dx, dz) if 0 < k < 6 else None
+            wx, wz = (w.x, w.y) if w is not None else (x, z)
+            if k == 6:
+                wx, wz = pts[-1][0] - dx * 0.025 + dx * 0.05, pts[-1][2] - dz * 0.025 + dz * 0.05
+            pts.append((wx + dx * 0.025, yy + (0.004 if k == 0 else 0), wz + dz * 0.025, dx, dz))
+        fall_ribbon(unlit, pts, 0.13, 1)
+        bx, bz = pts[-1][0] + dx * 0.05, pts[-1][2] + dz * 0.05
+        splash(unlit, bx, bz, lower, 0.1 if ny is None else 0.07)
+        if ny is None or lower <= LEVEL_Y[BEACH] + 0.001:
+            if ny is not None:  # across the beach and into the sea
+                ex, ez = bx, bz
+                while ground.at(ex + dx * step, ez + dz * step)[0] is not None:
+                    ex, ez = ex + dx * step, ez + dz * step
+                stream(unlit, bx, bz, ex + dx * 0.05, ez + dz * 0.05, lower + 0.004, width=0.12)
+                splash(unlit, ex + dx * 0.1, ez + dz * 0.1, WATER_LEVEL, 0.09)
+            return
+        x, z, y = bx, bz, lower
+
+
+WATER_LEVEL = -0.036
+
+
 def waterfalls(ground, sink, unlit):
     fall = D['features']['fall']
     if fall:
-        pts = []
-        dx, dz = fall['dir']
-        for x, y, z in fall['samples']:
-            pts.append((x + dx * 0.02, y, z + dz * 0.02, dx, dz))
-        fall_ribbon(unlit, pts, 0.16, 1)
-        bx, by, bz = fall['samples'][-1]
-        splash(unlit, bx + dx * 0.08, bz + dz * 0.08, by, 0.12)
+        x, _, z = fall['samples'][0]
+        cascade(ground, unlit, x, z, fall['dir'][0], fall['dir'][1])
     # A second, front-facing fall from the tier onto the lawn, into a pool, clear of the trail and camp.
     pts = outline(TIER, 2)
     ns = outward_normals(pts)
     best = None
     for i, (x, z) in enumerate(pts):
         facing = ns[i][1]  # toward layout +z (the camera)
-        if facing < 0.55 or x < 0.1:
+        if facing < 0.35:
             continue
         clear = ground.trail_distance(x, z, 0.0)
         camp = min(math.hypot(x - p['x'], z - p['z']) for p in D['props'] if p['kind'] in ('tent', 'campfire'))
         cave = min((math.hypot(x - c['x'], z - c['z']) for c in D['features']['caves']), default=9)
-        if clear < 0.6 or camp < 0.5 or cave < 0.45:
+        pillar = min((math.hypot(x - pl['x'], z - pl['z']) for pl in D['features']['pillars']), default=9)
+        if clear < 0.55 or camp < 0.5 or cave < 0.45 or pillar < 0.35:
             continue
-        score = clear + facing
+        score = min(clear, 1.0) + facing + min(pillar, 0.8)
         if best is None or score > best[0]:
             best = (score, i)
     if best is None:
         return
     x, z = pts[best[1]]
     nx, nz = ns[best[1]]
-    col_pts = []
-    lo, hi = LEVEL_Y[LAWN], LEVEL_Y[TIER]
-    for k in range(9):
-        y = hi - (hi - lo) * k / 8
-        w = ground.wall_point(x, min(y, hi - 0.01), z, nx, nz)
-        wx, wz = (w.x, w.y) if w is not None else (x, z)
-        col_pts.append((wx + nx * 0.025, y + (0.004 if k == 0 else 0), wz + nz * 0.025, nx, nz))
-    fall_ribbon(unlit, col_pts, 0.14, 2)
-    # stream across the tier top into the fall, and a pool at its foot
-    fall, streak = col(PAL['fall']), col(PAL['fallStreak'])
-    for k in range(4):
-        a0, a1 = k / 4 * 0.4, (k + 1) / 4 * 0.4
-        q = [P(x - nx * a0 - nz * 0.05, hi + 0.004, z - nz * a0 + nx * 0.05), P(x - nx * a0 + nz * 0.05, hi + 0.004, z - nz * a0 - nx * 0.05),
-             P(x - nx * a1 + nz * 0.05, hi + 0.004, z - nz * a1 - nx * 0.05), P(x - nx * a1 - nz * 0.05, hi + 0.004, z - nz * a1 + nx * 0.05)]
-        unlit.face(Matrix.Identity(4), [tuple(v) for v in q], fall if k % 2 else streak, double=True)
-    px, pz = col_pts[-1][0] + nx * 0.14, col_pts[-1][2] + nz * 0.14
-    ring = [(px + math.cos(t) * 0.2, pz + math.sin(t) * 0.16) for t in [2 * math.pi * m / 16 for m in range(16)]]
-    unlit.face(Matrix.Identity(4), [tuple(P(rx, lo + 0.003, rz)) for rx, rz in ring][::-1], col(PAL['pool']))
-    for m in range(16):
-        a, b = ring[m], ring[(m + 1) % 16]
-        ao = (px + (a[0] - px) * 1.2, pz + (a[1] - pz) * 1.2)
-        bo = (px + (b[0] - px) * 1.2, pz + (b[1] - pz) * 1.2)
-        unlit.face(Matrix.Identity(4), [tuple(P(*a2)) for a2 in ((a[0], lo + 0.0035, a[1]), (ao[0], lo + 0.0035, ao[1]), (bo[0], lo + 0.0035, bo[1]), (b[0], lo + 0.0035, b[1]))], col(PAL['foam']), double=True)
-    splash(unlit, col_pts[-1][0] + nx * 0.06, col_pts[-1][2] + nz * 0.06, lo + 0.004, 0.08)
-    for a in (-0.5, 0.6):
-        rock(sink, frame(px + math.cos(a) * 0.26, pz + math.sin(a) * 0.22, lo), 0.08, rng)
+    cascade(ground, unlit, x - nx * 0.35, z - nz * 0.35, nx, nz)
+    for a in (-0.9, 0.9):  # rocks either side of where it lands on the lawn
+        bx, bz = x + nx * 0.2 + math.cos(a) * nz * 0.18, z + nz * 0.2 - math.cos(a) * nx * 0.18 * (1 if a > 0 else -1)
+        yy, _ = ground.at(bx, bz)
+        if yy is not None and abs(yy - LEVEL_Y[LAWN]) < 0.01:
+            rock(sink, frame(bx, bz, yy), 0.08, rng)
 
 
 def vines(ground, sink):
