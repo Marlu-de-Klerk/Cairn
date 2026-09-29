@@ -217,6 +217,12 @@ export const BIOME_TERRAIN: Record<Biome, BiomeTerrainConfig> = {
   },
   highlands: {
     ...JUNGLE_TERRAIN,
+    // Rolling mid-height terraces with the top crag pushed well off to one side, where the castle stands.
+    tiers: [
+      { y: 0.8, radiusRatio: 0.75, drift: 0.25, ledge: { back: 0.3, front: 0.95 }, harmonicAmp: 0.1 },
+      { y: 1.7, radiusRatio: 0.5, drift: 0.85, ledge: { back: 0.28, front: 0.75 }, harmonicAmp: 0.1 },
+    ],
+    features: { shelf: JUNGLE_TERRAIN.features.shelf, pool: 'lagoon', cave: false, pillars: 2, vines: 0, waterRocks: 5, camp: true },
     props: stubProps('pine', 'heather'),
     palette: palette(
       {
@@ -232,7 +238,7 @@ export const BIOME_TERRAIN: Record<Biome, BiomeTerrainConfig> = {
 }
 
 export function isTerraced(biome: Biome): boolean {
-  return biome === 'jungle' || biome === 'desert' || biome === 'reef' || biome === 'tundra'
+  return biome !== 'volcano'
 }
 
 export function propRule(biome: Biome, kind: PropKind): PropRule | undefined {

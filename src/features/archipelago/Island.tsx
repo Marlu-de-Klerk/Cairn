@@ -13,24 +13,20 @@ import { useIslandBuild } from './terrain/islandCache'
 import type { LitMaterialKind } from './terrain/materials'
 import { TerracedIsland } from './TerracedIsland'
 import { useHullRegistry } from './hullRegistry'
-import { HighlandsLandmass } from './models/HighlandsLandmass'
-import { HighlandsProps } from './models/HighlandsProps'
 import { VolcanoLandmass } from './models/VolcanoLandmass'
 import { VolcanoProps } from './models/VolcanoProps'
 
-type LegacyBiome = Exclude<Goal['biome'], 'jungle' | 'desert' | 'reef' | 'tundra'>
+type LegacyBiome = Exclude<Goal['biome'], 'jungle' | 'desert' | 'reef' | 'tundra' | 'highlands'>
 
 const LANDMASS_COMPONENTS: Record<LegacyBiome, typeof VolcanoLandmass> = {
   volcano: VolcanoLandmass,
-  highlands: HighlandsLandmass,
 }
 
 const PROPS_COMPONENTS: Record<LegacyBiome, typeof VolcanoProps> = {
   volcano: VolcanoProps,
-  highlands: HighlandsProps,
 }
 
-const PROP_COUNT_BY_BIOME: Record<LegacyBiome, number> = { volcano: 4, highlands: 7 }
+const PROP_COUNT_BY_BIOME: Record<LegacyBiome, number> = { volcano: 4 }
 
 // Legacy GLTF biomes only (retired in the next plan): their Kenney platforms are authored at 0.447 half-width, so
 // 4.4x restores a ~1.97 footprint, with the label, hover card and hover lift tuned to that 0.365-tall platform.
