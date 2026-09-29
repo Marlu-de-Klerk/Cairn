@@ -177,6 +177,12 @@ export const BIOME_TERRAIN: Record<Biome, BiomeTerrainConfig> = {
   },
   tundra: {
     ...JUNGLE_TERRAIN,
+    // Tall and concentric: two high steps stacked almost centre on centre, so the island reads as one mountain.
+    tiers: [
+      { y: 1.15, radiusRatio: 0.72, drift: 0.2, ledge: { back: 0.3, front: 0.9 }, harmonicAmp: 0.08 },
+      { y: 2.15, radiusRatio: 0.62, drift: 0.15, ledge: { back: 0.28, front: 0.8 }, harmonicAmp: 0.08 },
+    ],
+    features: { shelf: JUNGLE_TERRAIN.features.shelf, pool: 'lagoon', cave: false, pillars: 3, vines: 0, waterRocks: 6, camp: true },
     props: stubProps('pine', 'bush'),
     palette: palette(
       {
@@ -226,7 +232,7 @@ export const BIOME_TERRAIN: Record<Biome, BiomeTerrainConfig> = {
 }
 
 export function isTerraced(biome: Biome): boolean {
-  return biome === 'jungle' || biome === 'desert' || biome === 'reef'
+  return biome === 'jungle' || biome === 'desert' || biome === 'reef' || biome === 'tundra'
 }
 
 export function propRule(biome: Biome, kind: PropKind): PropRule | undefined {

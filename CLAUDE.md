@@ -27,7 +27,7 @@ Shared helper functions (`owns_goal`, `goal_publicly_readable`, `entry_readable`
 - Generate typed components with `gltfjsx` — never `useGLTF` on a raw glTF inline in a feature component.
 - Props must be instanced (`<Instances>`), never one mesh per prop.
 - Islands are modular: one base landmass mesh per biome, props scattered on top, seeded deterministically from `goal.id` so an island looks the same on every visit.
-- Total initial glTF payload budget: under 3 MB compressed. Preload only the biomes present in the current user's archipelago.
+- glTF payload budget: each hand-built island ≤ ~1.2 MB compressed (≤ ~65k triangles, 3 draw calls). Raised from a 3 MB total on 2026-09-29, since the hand-built islands together exceed it: only the biomes present in the current user's archipelago are downloaded, so preload only those.
 - Performance targets: 60fps desktop, 30+ mid-range Android. `frameloop="demand"` on the island detail view. Never render the archipelago and the detail view as two live scenes at once.
 - The trail marker is a simple object (flag/lantern), not a character model — bias sourcing toward nature/prop packs, not character packs.
 

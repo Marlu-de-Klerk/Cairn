@@ -14,6 +14,8 @@ export const HAND_BUILT: Partial<Record<Biome, HandBuiltIsland>> = {
   desert: { seed: 10, url: '/models/DesertIsland.glb' },
   // seed 19: a wide front lawn for the lagoon, camp in view
   reef: { seed: 19, url: '/models/ReefIsland.glb' },
+  // seed 7: a frozen pond on the front lawn, cabin in view
+  tundra: { seed: 7, url: '/models/TundraIsland.glb' },
 }
 
 /** Biomes that render a hand-built model instead of the procedural terrain and props. */

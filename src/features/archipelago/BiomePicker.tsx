@@ -7,17 +7,16 @@ import { BIOME_TERRAIN, isTerraced } from '../../lib/island/biomes'
 import { useIslandBuild } from './terrain/islandCache'
 import { TerracedIsland } from './TerracedIsland'
 import { HullRegistryProvider } from './hullRegistry'
-import { TundraLandmass } from './models/TundraLandmass'
 import { VolcanoLandmass } from './models/VolcanoLandmass'
 import { HighlandsLandmass } from './models/HighlandsLandmass'
 import { islandLayoutSeed } from '../../lib/island/fixedIslands'
 
-type LandmassComponent = typeof TundraLandmass
+type LandmassComponent = typeof VolcanoLandmass
 
 const BIOMES: { key: Goal['biome']; label: string; Landmass: LandmassComponent | null }[] = [
   { key: 'jungle', label: 'Jungle', Landmass: null },
   { key: 'desert', label: 'Desert', Landmass: null },
-  { key: 'tundra', label: 'Tundra', Landmass: TundraLandmass },
+  { key: 'tundra', label: 'Tundra', Landmass: null },
   { key: 'volcano', label: 'Volcano', Landmass: VolcanoLandmass },
   { key: 'reef', label: 'Reef', Landmass: null },
   { key: 'highlands', label: 'Highlands', Landmass: HighlandsLandmass },
