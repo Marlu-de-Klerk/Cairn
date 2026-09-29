@@ -8,7 +8,6 @@ import { SceneEnvironment } from './SceneEnvironment'
 import { HullRegistryProvider } from './hullRegistry'
 import { CameraRig } from './CameraRig'
 import { RoadmapTrail } from '../roadmap/RoadmapTrail'
-import { isTerraced } from '../../lib/island/biomes'
 import { ISLAND_YAW } from '../../lib/island/orientation'
 import { preloadHandBuiltIslands } from './models/HandBuiltIsland'
 
@@ -45,13 +44,13 @@ export function ArchipelagoScene({ showCompleted }: ArchipelagoSceneProps) {
 
   return (
     <div className="fixed inset-0 -z-10">
-      {/* A focused terraced island redraws only on demand: every animator there (camera flight, orbit drag, trail
-          springs, cairn pulse, hover lift) calls invalidate(). Legacy biomes and the overview's auto-rotate still
-          animate every frame. touch-action: none keeps a one-finger orbit drag from scrolling the page. */}
+      {/* A focused island redraws only on demand: every animator there (camera flight, orbit drag, trail springs,
+          cairn pulse, hover lift) calls invalidate(). The overview's auto-rotate still animates every frame.
+          touch-action: none keeps a one-finger orbit drag from scrolling the page. */}
       <Canvas
         camera={{ fov: 50 }}
         flat
-        frameloop={focusedGoal && isTerraced(focusedGoal.biome) ? 'demand' : 'always'}
+        frameloop={focusedGoal ? 'demand' : 'always'}
         style={{ touchAction: 'none' }}
       >
         <SceneEnvironment />
@@ -65,7 +64,7 @@ export function ArchipelagoScene({ showCompleted }: ArchipelagoSceneProps) {
           />
         ))}
         {focusedGoal ? (
-          <group position={[focusedGoal.islandX, 0, focusedGoal.islandZ]} rotation={[0, isTerraced(focusedGoal.biome) ? ISLAND_YAW : focusedGoal.islandRotation, 0]}>
+          <group position={[focusedGoal.islandX, 0, focusedGoal.islandZ]} rotation={[0, ISLAND_YAW, 0]}>
             <RoadmapTrail key={focusedGoal.id} goal={focusedGoal} />
           </group>
         ) : null}

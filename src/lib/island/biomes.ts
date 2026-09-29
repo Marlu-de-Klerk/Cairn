@@ -243,11 +243,6 @@ export const BIOME_TERRAIN: Record<Biome, BiomeTerrainConfig> = {
   },
 }
 
-/** Every biome now renders a hand-built terraced island; kept so the remaining legacy branches read clearly until they are removed. */
-export function isTerraced(_biome: Biome): boolean {
-  return true
-}
-
 export function propRule(biome: Biome, kind: PropKind): PropRule | undefined {
   return BIOME_TERRAIN[biome].props.find((rule) => rule.kind === kind)
 }

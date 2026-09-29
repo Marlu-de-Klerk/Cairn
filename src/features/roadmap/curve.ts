@@ -31,18 +31,6 @@ export function buildTrailCurve(waypoints: readonly Vec3[], clearance = TRAIL_CL
   return curve
 }
 
-/** The pre-terraced cone spiral, kept only for the five biomes not yet migrated; deleted in the next plan. */
-export function buildLegacyConeCurve(baseRadius: number, height: number, seed: number): CatmullRomCurve3 {
-  const points: Vector3[] = []
-  const count = 24
-  for (let i = 0; i <= count; i++) {
-    const s = i / count
-    const angle = seed + s * 1.5 * Math.PI * 2
-    points.push(new Vector3(baseRadius * (1 - s) * Math.cos(angle), -height / 2 + height * s + 0.05, baseRadius * (1 - s) * Math.sin(angle)))
-  }
-  return new CatmullRomCurve3(points, false, 'catmullrom', 0.5)
-}
-
 /** Arc-length-parameterized point at `t`, clamped to [0,1]: even spacing along the walk matches trail.ts's milestones. */
 export function positionAt(curve: Curve<Vector3>, t: number): Vector3 {
   return curve.getPointAt(Math.max(0, Math.min(1, t)))
