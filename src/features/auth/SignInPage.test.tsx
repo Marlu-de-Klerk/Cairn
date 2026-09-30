@@ -62,7 +62,7 @@ describe('SignInPage', () => {
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'runner@example.com' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send me a sign-in link' }))
 
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/wait a minute/i))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/try again in a while/i))
   })
 
   it('offers a different email after sending', async () => {

@@ -28,7 +28,7 @@ describe('signInErrorMessage', () => {
 
 describe('signInFailureMessage', () => {
   it('explains a rate limit', () => {
-    expect(signInFailureMessage({ message: 'email rate limit exceeded', status: 429, code: 'over_email_send_rate_limit' })).toMatch(/wait a minute/i)
+    expect(signInFailureMessage({ message: 'email rate limit exceeded', status: 429, code: 'over_email_send_rate_limit' })).toMatch(/try again in a while/i)
   })
 
   it('explains a bad address', () => {
