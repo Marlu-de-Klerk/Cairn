@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { validateMilestones } from './newGoalValidation'
+import { validateGoalDetails, validateMilestones } from './newGoalValidation'
 
 describe('validateMilestones', () => {
   it('accepts strictly increasing milestones inside (start, target)', () => {
@@ -48,5 +48,34 @@ describe('validateMilestones', () => {
 
   it('accepts zero milestones', () => {
     expect(validateMilestones('numeric', 0, 10, []).valid).toBe(true)
+  })
+})
+
+describe('validateGoalDetails', () => {
+  it('accepts a titled numeric goal with a target above its start', () => {
+    expect(validateGoalDetails('numeric', 'Run 10K', '10', '0')).toEqual({})
+    expect(validateGoalDetails('numeric', 'Run 10K', ' 10.5 ', '')).toEqual({})
+  })
+
+  it('needs a title', () => {
+    expect(validateGoalDetails('checklist', '  ', '', '').title).toBeDefined()
+  })
+
+  it('rejects a target that is not a number', () => {
+    expect(validateGoalDetails('numeric', 'Run 10K', 'abc', '0').target).toMatch(/number/i)
+    expect(validateGoalDetails('numeric', 'Run 10K', '', '0').target).toBeDefined()
+  })
+
+  it('rejects a target at or below the starting value', () => {
+    expect(validateGoalDetails('numeric', 'Lose weight', '5', '5').target).toMatch(/greater than/i)
+    expect(validateGoalDetails('numeric', 'Lose weight', '5', '8').target).toMatch(/greater than/i)
+  })
+
+  it('rejects a starting value that is not a number', () => {
+    expect(validateGoalDetails('numeric', 'Run 10K', '10', 'x').start).toMatch(/number/i)
+  })
+
+  it('ignores target and start for a checklist goal', () => {
+    expect(validateGoalDetails('checklist', 'Learn Portuguese', 'abc', 'x')).toEqual({})
   })
 })

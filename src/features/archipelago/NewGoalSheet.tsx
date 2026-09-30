@@ -5,7 +5,7 @@ import { MilestoneBuilder } from './MilestoneBuilder'
 import type { MilestoneRow } from './MilestoneBuilder'
 import { useCreateGoal } from './api'
 import type { Goal } from './api'
-import { validateMilestones } from '../../lib/newGoalValidation'
+import { parseNumberField, validateGoalDetails, validateMilestones } from '../../lib/newGoalValidation'
 
 type Step = 1 | 2 | 3
 
@@ -56,15 +56,14 @@ export function NewGoalSheet({ open, onOpenChange, onCreated }: NewGoalSheetProp
     title: m.title,
     targetValue: m.targetValue === '' ? null : Number(m.targetValue),
   }))
-  const validation = validateMilestones(
-    kind,
-    Number(startValue) || 0,
-    targetValue === '' ? null : Number(targetValue),
-    parsedMilestones,
-  )
+  const detailErrors = validateGoalDetails(kind, title, targetValue, startValue)
+  const detailsValid = Object.keys(detailErrors).length === 0
+  const start = parseNumberField(startValue) ?? 0
+  const target = kind === 'numeric' ? parseNumberField(targetValue) : null
+  const validation = validateMilestones(kind, start, target, parsedMilestones)
 
   async function handleSubmit() {
-    if (!biome || !validation.valid) return
+    if (!biome || !detailsValid || !validation.valid) return
     setSubmitError(null)
     try {
       const goal = await createGoal.mutateAsync({
@@ -73,8 +72,8 @@ export function NewGoalSheet({ open, onOpenChange, onCreated }: NewGoalSheetProp
         biome,
         kind,
         unit: kind === 'numeric' ? unit.trim() || null : null,
-        startValue: Number(startValue) || 0,
-        targetValue: kind === 'numeric' ? Number(targetValue) : null,
+        startValue: start,
+        targetValue: target,
         isPublic: false,
         milestones: parsedMilestones,
       })
@@ -155,7 +154,11 @@ export function NewGoalSheet({ open, onOpenChange, onCreated }: NewGoalSheetProp
                       inputMode="decimal"
                       className="mt-1 w-full rounded-md border border-stone-light bg-ink px-3 py-2 font-body text-sm text-mist"
                       placeholder="10"
+                      aria-invalid={targetValue.trim() !== '' && !!detailErrors.target}
                     />
+                    {targetValue.trim() !== '' && detailErrors.target ? (
+                      <span className="mt-1 block font-body text-xs text-accent-error">{detailErrors.target}</span>
+                    ) : null}
                   </label>
                   <label className="block">
                     <span className="font-body text-sm text-mist/70">Unit</span>
@@ -181,7 +184,11 @@ export function NewGoalSheet({ open, onOpenChange, onCreated }: NewGoalSheetProp
                       onChange={(e) => setStartValue(e.target.value)}
                       inputMode="decimal"
                       className="mt-1 w-full rounded-md border border-stone-light bg-ink px-3 py-2 font-body text-sm text-mist"
+                      aria-invalid={!!detailErrors.start}
                     />
+                    {detailErrors.start ? (
+                      <span className="mt-1 block font-body text-xs text-accent-error">{detailErrors.start}</span>
+                    ) : null}
                   </label>
                 </div>
               ) : null}
@@ -191,7 +198,7 @@ export function NewGoalSheet({ open, onOpenChange, onCreated }: NewGoalSheetProp
                 </button>
                 <button
                   type="button"
-                  disabled={!title.trim() || (kind === 'numeric' && !targetValue)}
+                  disabled={!detailsValid}
                   onClick={() => setStep(3)}
                   className={CONTINUE_BUTTON_CLASS}
                 >
@@ -217,7 +224,7 @@ export function NewGoalSheet({ open, onOpenChange, onCreated }: NewGoalSheetProp
                 </button>
                 <button
                   type="button"
-                  disabled={!validation.valid || createGoal.isPending}
+                  disabled={!detailsValid || !validation.valid || createGoal.isPending}
                   onClick={handleSubmit}
                   className={CREATE_BUTTON_CLASS}
                 >

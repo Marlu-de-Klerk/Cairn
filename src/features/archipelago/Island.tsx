@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
@@ -80,6 +80,8 @@ function useHoverLift(targetLift: number) {
 
 function TerracedIslandNode({ goal, onClick, focused, seedOverride, materialKind }: IslandProps & { focused: boolean }) {
   const [hovered, setHovered] = useState(false)
+  // A tap has no pointer-out to end the hover, so a focus change always clears it.
+  useEffect(() => setHovered(false), [focused])
   const seed = islandLayoutSeed(goal.biome, seedOverride ?? hashGoalId(goal.id))
   const build = useIslandBuild(goal.biome, seed, focused ? 'focus' : 'overview', focused ? 'high' : 'normal')
   const anchors = useMemo(() => (build ? islandAnchors(build.layout) : null), [build])
@@ -101,12 +103,14 @@ function TerracedIslandNode({ goal, onClick, focused, seedOverride, materialKind
           }}
           onPointerOver={(event) => {
             event.stopPropagation()
-            setHovered(true)
+            // Hover is a mouse affordance: on touch it would only stick after the tap.
+            if (event.pointerType !== 'touch') setHovered(true)
           }}
           onPointerOut={() => setHovered(false)}
         />
       </group>
-      <Labels goal={goal} labelY={anchors.labelY} cardY={anchors.cardY} hovered={hovered} occlude={occluders} />
+      {/* The focused island's details are in the roadmap panel, so it never shows the hover card over its label. */}
+      <Labels goal={goal} labelY={anchors.labelY} cardY={anchors.cardY} hovered={hovered && !focused} occlude={occluders} />
     </group>
   )
 }

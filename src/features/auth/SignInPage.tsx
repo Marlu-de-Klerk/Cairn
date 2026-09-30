@@ -1,10 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import { supabase } from '../../lib/supabase'
+import { signInErrorMessage } from '../../lib/authCallback'
 
 export function SignInPage() {
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
-  const [errorMessage, setErrorMessage] = useState('')
+  // A failed magic link or OAuth sign-in comes back from /auth/callback as ?error=<code>.
+  const [errorMessage, setErrorMessage] = useState(
+    () => signInErrorMessage(new URLSearchParams(window.location.search).get('error')) ?? '',
+  )
 
   async function handleMagicLinkSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -74,7 +78,7 @@ export function SignInPage() {
           </form>
         )}
 
-        {errorMessage ? <p className="text-sm text-red-400">{errorMessage}</p> : null}
+        {errorMessage ? <p role="alert" className="text-sm text-red-400">{errorMessage}</p> : null}
 
         <div className="flex items-center gap-2 text-xs text-slate-500">
           <span className="h-px flex-1 bg-slate-800" />

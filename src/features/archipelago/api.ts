@@ -181,7 +181,9 @@ export function useCreateGoal() {
       if (error) throw error
       return toGoal(data)
     },
-    onSuccess: () => {
+    onSuccess: (goal) => {
+      // In the cache before the refetch lands, so navigating straight to the new island finds it.
+      if (session) queryClient.setQueryData<Goal[]>(['goals', session.user.id], (goals) => (goals ? [...goals, goal] : goals))
       queryClient.invalidateQueries({ queryKey: ['goals'] })
     },
   })

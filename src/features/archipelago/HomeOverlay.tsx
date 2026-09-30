@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useMatch, useNavigate } from 'react-router'
+import { useEffect, useRef, useState } from 'react'
+import { useLocation, useMatch, useNavigate } from 'react-router'
 import { useGoals } from './api'
 import { useSession } from '../auth/useSession'
 import { supabase } from '../../lib/supabase'
@@ -14,12 +14,48 @@ interface HomeOverlayProps {
 
 export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverlayProps) {
   const { session } = useSession()
-  const { data: goals, isLoading, isError } = useGoals()
+  const { data: goals, isLoading, isError, isFetching } = useGoals()
   const focusedGoalId = useMatch('/g/:id')?.params.id
   const focusedGoal = goals?.find((g) => g.id === focusedGoalId) ?? null
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false)
   const [newGoalOpen, setNewGoalOpen] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
+  const avatarMenuRef = useRef<HTMLDivElement>(null)
+  const avatarButtonRef = useRef<HTMLButtonElement>(null)
+
+  // A /g/:id link to a goal that isn't (or is no longer) one of the user's goals: say so and go home, rather than
+  // leaving a dead URL over the plain overview. Waits out a refetch, so a just-created goal isn't mistaken for one.
+  const goalMissing = !!focusedGoalId && !!goals && !isFetching && !focusedGoal
+  useEffect(() => {
+    if (goalMissing) navigate('/', { replace: true, state: { missingGoal: true } })
+  }, [goalMissing, navigate])
+  const [dismissedNoticeKey, setDismissedNoticeKey] = useState<string | null>(null)
+  const showMissingNotice = (location.state as { missingGoal?: boolean } | null)?.missingGoal === true && dismissedNoticeKey !== location.key
+  useEffect(() => {
+    if (!showMissingNotice) return
+    const timer = setTimeout(() => setDismissedNoticeKey(location.key), 5000)
+    return () => clearTimeout(timer)
+  }, [showMissingNotice, location.key])
+
+  // The account menu closes on Escape (handing focus back to its button) or on a press anywhere outside it.
+  useEffect(() => {
+    if (!avatarMenuOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setAvatarMenuOpen(false)
+      avatarButtonRef.current?.focus()
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      if (!avatarMenuRef.current?.contains(event.target as Node)) setAvatarMenuOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('pointerdown', onPointerDown)
+    }
+  }, [avatarMenuOpen])
 
   const activeCount = goals?.filter((g) => g.status === 'active').length ?? 0
   const completedCount = goals?.filter((g) => g.status === 'completed').length ?? 0
@@ -59,9 +95,13 @@ export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverla
             Explore
           </button>
 
-          <div className="relative">
+          <div ref={avatarMenuRef} className="relative">
             <button
+              ref={avatarButtonRef}
               type="button"
+              aria-label="Account"
+              aria-haspopup="true"
+              aria-expanded={avatarMenuOpen}
               onClick={() => setAvatarMenuOpen((value) => !value)}
               className="rounded-full border border-stone-light px-3 py-1.5 text-xs text-mist"
             >
@@ -84,6 +124,13 @@ export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverla
       </header>
 
       <div className="pointer-events-none relative flex-1 font-body">
+        {showMissingNotice ? (
+          <div className="pointer-events-none absolute inset-x-0 top-4 flex justify-center px-4">
+            <p role="status" className="pointer-events-auto rounded-md border border-stone-light bg-stone/90 px-4 py-2 text-sm text-mist backdrop-blur-sm">
+              That island couldn't be found.
+            </p>
+          </div>
+        ) : null}
         {showError ? (
           <div className="pointer-events-none flex h-full items-center justify-center">
             <div className="pointer-events-auto max-w-xs rounded-md border border-stone-light bg-stone/80 p-4 text-center text-sm text-mist backdrop-blur-sm">

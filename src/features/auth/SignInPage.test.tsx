@@ -25,6 +25,16 @@ describe('SignInPage', () => {
     expect(screen.getByRole('button', { name: 'Send me a sign-in link' })).toBeInTheDocument()
   })
 
+  it('explains an expired sign-in link passed back from the callback', () => {
+    window.history.pushState({}, '', '/sign-in?error=link-expired')
+    try {
+      render(<SignInPage />)
+      expect(screen.getByRole('alert')).toHaveTextContent(/expired or was already used/)
+    } finally {
+      window.history.pushState({}, '', '/')
+    }
+  })
+
   it('sends a magic link and shows confirmation', async () => {
     render(<SignInPage />)
 
