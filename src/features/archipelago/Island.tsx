@@ -12,6 +12,8 @@ import { useIslandBuild } from './terrain/islandCache'
 import type { LitMaterialKind } from './terrain/materials'
 import { TerracedIsland } from './TerracedIsland'
 import { useHullRegistry } from './hullRegistry'
+import { CompletionBurst } from './CompletionBurst'
+import { endCelebration, useCelebration } from '../roadmap/celebration'
 import { formatValue } from '../../lib/goalProgress'
 
 interface IslandProps {
@@ -31,6 +33,8 @@ interface IslandProps {
 function hexToCssColor(hex: number): string {
   return `#${hex.toString(16).padStart(6, '0')}`
 }
+
+const LANTERN = '#E8A24C' // --color-lantern
 
 function progressLabelFor(goal: Goal): string {
   if (goal.kind === 'numeric') {
@@ -55,7 +59,7 @@ function Label({ goal, labelY, hovered, occlude }: { goal: Goal; labelY: number;
         className={`-translate-x-1/2 -translate-y-full rounded-md border-t-2 transition-opacity duration-150 bg-stone/90 font-body text-mist shadow-md backdrop-blur-sm ${
           hovered ? 'w-56 p-3 text-sm' : 'flex max-w-[18rem] items-baseline gap-1.5 whitespace-nowrap px-2 py-1 text-xs'
         }`}
-        style={{ borderTopColor: accentColor }}
+        style={{ borderTopColor: goal.status === 'completed' ? LANTERN : accentColor }}
       >
         {hovered ? (
           <>
@@ -66,7 +70,11 @@ function Label({ goal, labelY, hovered, occlude }: { goal: Goal; labelY: number;
         ) : (
           <>
             <span className="min-w-0 truncate font-medium">{goal.title}</span>
-            <span className="shrink-0 text-mist/70">{progressLabel}</span>
+            {goal.status === 'completed' ? (
+              <span className="shrink-0 font-medium text-lantern">✓ Complete</span>
+            ) : (
+              <span className="shrink-0 text-mist/70">{progressLabel}</span>
+            )}
           </>
         )}
       </div>
@@ -88,6 +96,7 @@ function useHoverLift(targetLift: number) {
 
 function TerracedIslandNode({ goal, onClick, focused, seedOverride, materialKind, labelHidden = false }: IslandProps & { focused: boolean }) {
   const [hovered, setHovered] = useState(false)
+  const celebration = useCelebration(goal.id)
   // A tap has no pointer-out to end the hover, so a focus change always clears it.
   useEffect(() => setHovered(false), [focused])
   const seed = islandLayoutSeed(goal.biome, seedOverride ?? hashGoalId(goal.id))
@@ -119,6 +128,14 @@ function TerracedIslandNode({ goal, onClick, focused, seedOverride, materialKind
       </group>
       {/* The focused island's details are in the roadmap panel, so it never opens the hover card; while another
           island is focused, this one's label steps aside so only the focused island is labelled. */}
+      {celebration !== null ? (
+        <CompletionBurst
+          key={celebration}
+          y={build.layout.summitTopY + 0.3}
+          colours={[LANTERN, hexToCssColor(getBiomePalette(goal.biome).accent), '#E9E6DE', '#4FA8A0', '#F4D06F']}
+          onDone={() => endCelebration(celebration)}
+        />
+      ) : null}
       {labelHidden ? null : <Label goal={goal} labelY={anchors.labelY} hovered={hovered && !focused} occlude={occluders} />}
     </group>
   )

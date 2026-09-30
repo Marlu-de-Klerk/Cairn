@@ -11,6 +11,8 @@ import {
 import type { MarkUndo } from './api'
 import { showToast } from '../toast/toast'
 import { EditGoalSheet } from './EditGoalSheet'
+import { celebrationEnabled } from './celebrate'
+import { celebrateGoal } from './celebration'
 import type { Goal } from '../archipelago/api'
 import { formatEntryDate, formatValue, goalProgress, updateEffect } from '../../lib/goalProgress'
 import { setSheetInset } from './sheetInset'
@@ -112,10 +114,11 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
       } else if (step.kind === 'final-target') {
         offerUndo(`${goal.title} complete.`, await completeGoal.mutateAsync(goal))
         // The banner is static, so it shows regardless of prefers-reduced-motion —
-        // reduced motion skips the animation, not the acknowledgment. Gate any
-        // future animated flourish on celebrationEnabled() from './celebrate'.
+        // reduced motion skips the animation (the confetti over the island), not
+        // the acknowledgment.
         setCelebrating(true)
-        setTimeout(() => setCelebrating(false), 1600)
+        setTimeout(() => setCelebrating(false), 4000)
+        if (celebrationEnabled()) celebrateGoal(goal.id)
       }
     } catch {
       setErrorMessage("Couldn't save. Try again.")
@@ -174,8 +177,12 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
       }
     >
       {celebrating ? (
-        <div className={`rounded-md border border-lantern bg-lantern/20 p-3 text-center text-sm font-medium text-lantern ${compact ? 'mx-4 mb-2' : ''}`}>
-          🎉 {goal.title} complete!
+        <div role="status" className={`rounded-md bg-lantern p-3 text-center text-ink shadow-lg ${compact ? 'mx-4 mb-2' : ''}`}>
+          <p className="font-display text-base font-medium">
+            <span aria-hidden="true">🎉 </span>
+            {goal.title} complete!
+          </p>
+          <p className="mt-0.5 text-xs text-ink/70">Every step of the trail, done.</p>
         </div>
       ) : null}
 
