@@ -3,6 +3,7 @@ import { Water } from './Water'
 import { Sky } from './Sky'
 import { OceanLife } from './OceanLife'
 import { HORIZON_COLOR } from './environmentColors'
+import { AmbientMotion } from './AmbientMotion'
 
 const SUN_POSITION: [number, number, number] = [SUN_DIR[0] * 20, SUN_DIR[1] * 20, SUN_DIR[2] * 20]
 
@@ -23,6 +24,7 @@ export function SceneEnvironment({ islands = [] }: SceneEnvironmentProps) {
       <Sky />
       <Water extent={extent} islands={islands} />
       <OceanLife extent={extent} islands={islands} />
+      <AmbientMotion />
     </>
   )
 }

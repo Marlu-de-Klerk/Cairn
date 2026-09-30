@@ -1,12 +1,16 @@
-import { useMemo } from 'react'
-import { useFrame } from '@react-three/fiber'
-import { Color, ShaderMaterial, Vector2, Vector3 } from 'three'
+import { useEffect, useMemo } from 'react'
+import { useFrame, useThree } from '@react-three/fiber'
+import { Color, LinearFilter, LinearMipmapLinearFilter, NoColorSpace, RepeatWrapping, ShaderMaterial, TextureLoader, Vector2, Vector3 } from 'three'
+import type { Texture } from 'three'
 import { WATER_Y } from '../../lib/island/types'
 import { SUN_DIR } from '../../lib/island/orientation'
-import { HORIZON_COLOR, SEA_COLOR, SEA_DEEP_COLOR, SEA_RIPPLE_COLOR } from './environmentColors'
+import { HORIZON_COLOR, SEA_COLOR, SEA_DEEP_COLOR, SEA_RIPPLE_COLOR, SKY_ZENITH_COLOR } from './environmentColors'
 
-/** Island centres the ripples stay off, so each island's own shallow halo meets flat sea at its edge. */
+/** Island centres the waves calm down around, so each island's own shallow halo meets flat sea at its edge. */
 export const MAX_ISLANDS = 32
+
+/** Seamless ocean normal map baked from Blender's FFT Ocean modifier (scripts/blender/water_normals.py). */
+export const WATER_NORMALS_URL = '/textures/water-normals.webp'
 
 const vertexShader = /* glsl */ `
   varying vec3 vWorld;
@@ -19,60 +23,66 @@ const vertexShader = /* glsl */ `
 
 const fragmentShader = /* glsl */ `
   uniform float uTime;
+  uniform sampler2D uNormals;
+  uniform float uHasNormals;
   uniform vec3 uSea;
   uniform vec3 uDeep;
   uniform vec3 uRipple;
   uniform vec3 uHorizon;
+  uniform vec3 uZenith;
   uniform vec3 uSun;
   uniform float uExtent;
   uniform vec2 uIslands[${MAX_ISLANDS}];
   uniform int uIslandCount;
   varying vec3 vWorld;
 
-  float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-  float noise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+  // Two layers of the ocean normal map drifting in different directions at different scales: their sum never
+  // visibly repeats, and reads as moving waves rather than a sliding texture.
+  vec3 waveNormal(vec2 p) {
+    vec3 a = texture2D(uNormals, p / 24.0 + vec2(uTime * 0.008, uTime * 0.005)).xyz * 2.0 - 1.0;
+    vec3 b = texture2D(uNormals, p / 13.0 + vec2(-uTime * 0.006, uTime * 0.01)).xyz * 2.0 - 1.0;
+    vec3 n = vec3(a.xy + b.xy * 0.8, a.z * b.z);
+    // map tangent space (x, y, z-up) onto the sea plane (x, z, y-up)
+    return normalize(vec3(n.x, n.z, n.y));
   }
 
   void main() {
     vec2 p = vWorld.xz;
     float fromCamera = distance(cameraPosition, vWorld);
 
-    // How far from the nearest island's halo: ripples and sparkles fade out before they reach it.
+    // Calm water right next to each island, so its baked shallow halo meets the sea colour exactly.
     float nearIsland = 1.0;
     for (int i = 0; i < ${MAX_ISLANDS}; i++) {
       if (i >= uIslandCount) break;
-      nearIsland = min(nearIsland, smoothstep(3.4, 5.5, distance(p, uIslands[i])));
+      nearIsland = min(nearIsland, smoothstep(3.1, 9.0, distance(p, uIslands[i])));
     }
 
     // Deep water beyond the archipelago.
     float deep = smoothstep(uExtent + 4.0, uExtent + 55.0, length(p));
-    vec3 color = mix(uSea, uDeep, deep * 0.85);
+    vec3 base = mix(uSea, uDeep, deep * 0.85);
 
-    // Thin, broken wave lines drifting across the sea: a warped sine field gives long crests, and a slower noise
-    // breaks them into short dashes. Thinned out with distance so the horizon stays calm.
-    float warp = noise(p * 0.15 + vec2(uTime * 0.04, 0.0)) * 7.0;
-    float lines = sin(p.x * 1.6 + p.y * 0.7 + warp + uTime * 0.8);
-    float broken = smoothstep(0.55, 0.8, noise(p * 0.45 - vec2(0.0, uTime * 0.12)));
-    float crest = smoothstep(0.93, 0.995, lines) * broken;
-    float lines2 = sin(p.y * 2.3 - p.x * 0.9 + warp * 1.4 - uTime * 0.6);
-    crest = max(crest, smoothstep(0.96, 0.998, lines2) * smoothstep(0.6, 0.85, noise(p * 0.6 + 17.0 + uTime * 0.08)) * 0.7);
-    float detail = 1.0 - smoothstep(25.0, 90.0, fromCamera);
-    color = mix(color, uRipple, crest * 0.5 * nearIsland * detail);
+    // Wave detail fades with distance (the texture would alias) and near islands.
+    float detail = (1.0 - smoothstep(35.0, 140.0, fromCamera)) * nearIsland * uHasNormals;
+    vec3 n = normalize(mix(vec3(0.0, 1.0, 0.0), waveNormal(p), detail * 0.6));
+    vec3 view = normalize(cameraPosition - vWorld);
 
-    // Sun glints: sparse cells that twinkle, stronger where the sea faces the sun from this viewpoint.
-    vec2 cell = floor(p * 2.2);
-    float seed = hash(cell);
-    float twinkle = pow(max(0.0, sin(uTime * (1.5 + seed * 2.5) + seed * 40.0)), 12.0);
-    vec2 inCell = fract(p * 2.2) - 0.5;
-    float dotShape = 1.0 - smoothstep(0.04, 0.16, length(inCell));
-    vec3 view = normalize(vWorld - cameraPosition);
-    float facing = pow(max(0.0, dot(reflect(view, vec3(0.0, 1.0, 0.0)), uSun)), 6.0);
-    float glint = step(0.93, seed) * twinkle * dotShape * nearIsland * detail * (0.35 + facing);
-    color = mix(color, vec3(1.0), clamp(glint, 0.0, 1.0));
+    // Wave faces tilted toward the viewer read a touch lighter, faces away a touch darker.
+    float tilt = dot(n.xz, normalize(view.xz + 1e-4));
+    vec3 color = base * (1.0 + tilt * 0.6);
+    // Steep crests catch a pale highlight.
+    float crest = smoothstep(0.1, 0.2, length(n.xz));
+    color = mix(color, uRipple, crest * 0.25);
+
+    // Sky reflection, stronger at grazing angles (Schlick), from the pale horizon up to the blue zenith.
+    vec3 r = reflect(-view, n);
+    vec3 sky = mix(uHorizon, uZenith, smoothstep(0.0, 0.6, r.y));
+    float fresnel = 0.02 + 0.98 * pow(1.0 - max(dot(n, view), 0.0), 5.0);
+    color = mix(color, sky, fresnel * 0.3);
+
+    // Sun: a broad sheen plus tight sparkles where a wave facet mirrors the sun into the eye.
+    vec3 h = normalize(view + uSun);
+    float nh = max(dot(n, h), 0.0);
+    color += vec3(1.0, 0.97, 0.9) * (pow(nh, 60.0) * 0.18 + pow(nh, 900.0) * 1.6 * detail);
 
     // Haze into the sky at the horizon.
     color = mix(color, uHorizon, smoothstep(70.0, 360.0, fromCamera));
@@ -89,11 +99,13 @@ interface WaterProps {
 }
 
 /**
- * The open sea: animated ripples and sun glints on the app's lagoon colour, deepening beyond the archipelago and
- * hazing into the sky at the horizon. Opaque and unlit, like before; foam and the shallow halos sit a few
- * millimetres above it, so polygonOffset pushes it back in depth rather than relying on those tiny height gaps.
+ * The open sea: moving waves from a baked ocean normal map, lit with a sky reflection and sun glints on the app's
+ * lagoon colour, deepening beyond the archipelago and hazing into the sky at the horizon. Opaque; foam and the
+ * shallow halos sit a few millimetres above it, so polygonOffset pushes it back in depth rather than relying on those
+ * tiny height gaps.
  */
 export function Water({ extent, islands }: WaterProps) {
+  const invalidate = useThree((state) => state.invalidate)
   const material = useMemo(
     () =>
       new ShaderMaterial({
@@ -101,10 +113,13 @@ export function Water({ extent, islands }: WaterProps) {
         fragmentShader,
         uniforms: {
           uTime: { value: 0 },
+          uNormals: { value: null as Texture | null },
+          uHasNormals: { value: 0 },
           uSea: { value: new Color(SEA_COLOR) },
           uDeep: { value: new Color(SEA_DEEP_COLOR) },
           uRipple: { value: new Color(SEA_RIPPLE_COLOR) },
           uHorizon: { value: new Color(HORIZON_COLOR) },
+          uZenith: { value: new Color(SKY_ZENITH_COLOR) },
           uSun: { value: new Vector3(...SUN_DIR) },
           uExtent: { value: extent },
           uIslands: { value: Array.from({ length: MAX_ISLANDS }, () => new Vector2(1e4, 1e4)) },
@@ -116,13 +131,32 @@ export function Water({ extent, islands }: WaterProps) {
       }),
     [],
   )
+
+  // Loaded without suspending: the sea draws flat until the map arrives, rather than holding up the whole scene.
+  useEffect(() => {
+    let alive = true
+    const texture = new TextureLoader().load(WATER_NORMALS_URL, () => {
+      if (!alive) return
+      material.uniforms.uHasNormals.value = 1
+      invalidate()
+    })
+    texture.wrapS = texture.wrapT = RepeatWrapping
+    texture.colorSpace = NoColorSpace
+    texture.magFilter = LinearFilter
+    texture.minFilter = LinearMipmapLinearFilter
+    texture.anisotropy = 4
+    material.uniforms.uNormals.value = texture
+    return () => {
+      alive = false
+      texture.dispose()
+    }
+  }, [material, invalidate])
+
   material.uniforms.uExtent.value = extent
   const list = islands.slice(0, MAX_ISLANDS)
   list.forEach(([x, z], i) => (material.uniforms.uIslands.value[i] as Vector2).set(x, z))
   material.uniforms.uIslandCount.value = list.length
 
-  // Under the focused view's demand frameloop this only advances when something else requests a frame, so the
-  // detail view stays still (CLAUDE.md: frameloop="demand" there) while the overview animates.
   useFrame((state) => {
     material.uniforms.uTime.value = state.clock.elapsedTime
   })

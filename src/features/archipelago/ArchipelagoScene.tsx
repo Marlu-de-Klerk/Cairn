@@ -51,12 +51,14 @@ export function ArchipelagoScene({ showCompleted }: ArchipelagoSceneProps) {
 
   return (
     <div className="fixed inset-0 -z-10">
-      {/* A focused island redraws only on demand: every animator there (camera flight, orbit drag, zoom, trail
-          springs, cairn pulse, hover lift) calls invalidate(), so the sea and ocean life hold still there. The
-          overview animates every frame. touch-action: none keeps a one-finger orbit drag or a pinch from scrolling
-          or zooming the page. */}
+      {/* A focused island uses the demand frameloop: AmbientMotion keeps the sea and ocean life moving at a capped
+          30 fps, and every other animator there (camera flight, orbit drag, zoom, trail springs, cairn pulse, hover
+          lift) calls invalidate() for smooth motion while it runs. The overview animates every frame. dpr is capped
+          so high-density phone screens don't shade ~9x the pixels. touch-action: none keeps a one-finger orbit drag
+          or a pinch from scrolling or zooming the page. */}
       <Canvas
         camera={{ fov: 50 }}
+        dpr={[1, 1.5]}
         flat
         frameloop={focusedGoal ? 'demand' : 'always'}
         style={{ touchAction: 'none' }}
