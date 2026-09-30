@@ -21,6 +21,8 @@ interface IslandProps {
   seedOverride?: number
   /** DEV harness only: toon/Lambert A/B (spec Q3). */
   materialKind?: LitMaterialKind
+  /** Another island is focused: hide this one's label. */
+  labelHidden?: boolean
 }
 
 // Palette colors are three.js hex numbers (see lib/theme.ts); the <Html> label/card
@@ -37,32 +39,36 @@ function progressLabelFor(goal: Goal): string {
   return goal.status === 'completed' ? 'Complete' : 'In progress'
 }
 
-function Labels({ goal, labelY, cardY, hovered, occlude }: { goal: Goal; labelY: number; cardY: number; hovered: boolean; occlude: boolean | RefObject<Object3D>[] }) {
+/**
+ * One label per island, a fixed pixel size at any zoom (a distance-scaled label is unreadable across the archipelago
+ * and fills the screen up close). Its bottom edge sits on the anchor above the summit, so it grows upward: on hover
+ * it opens into a card with the full title, description and progress instead of stacking a second box over it.
+ */
+function Label({ goal, labelY, hovered, occlude }: { goal: Goal; labelY: number; hovered: boolean; occlude: boolean | RefObject<Object3D>[] }) {
   const accentColor = hexToCssColor(getBiomePalette(goal.biome).accent)
   const progressLabel = progressLabelFor(goal)
   return (
-    <>
-      <Html position={[0, labelY, 0]} center occlude={occlude} distanceFactor={12} style={{ pointerEvents: 'none' }}>
-        <div
-          className="whitespace-nowrap rounded-md border-t-2 bg-stone/90 px-2 py-1 text-xs font-body text-mist backdrop-blur-sm"
-          style={{ borderTopColor: accentColor }}
-        >
-          {goal.title} — {progressLabel}
-        </div>
-      </Html>
-      {hovered ? (
-        <Html position={[0, cardY, 0]} center occlude={occlude} distanceFactor={12}>
-          <div
-            className="w-48 rounded-md border border-t-2 border-stone-light bg-stone/90 p-3 text-sm font-body text-mist shadow-lg backdrop-blur-sm"
-            style={{ borderTopColor: accentColor }}
-          >
+    <Html position={[0, labelY, 0]} occlude={occlude} style={{ pointerEvents: 'none' }}>
+      <div
+        className={`-translate-x-1/2 -translate-y-full rounded-md border-t-2 bg-stone/90 font-body text-mist shadow-md backdrop-blur-sm ${
+          hovered ? 'w-56 p-3 text-sm' : 'flex max-w-[18rem] items-baseline gap-1.5 whitespace-nowrap px-2 py-1 text-xs'
+        }`}
+        style={{ borderTopColor: accentColor }}
+      >
+        {hovered ? (
+          <>
             <p className="font-display font-medium">{goal.title}</p>
             {goal.description ? <p className="mt-1 text-xs text-mist/60">{goal.description}</p> : null}
             <p className="mt-2 text-xs text-mist/80">{progressLabel}</p>
-          </div>
-        </Html>
-      ) : null}
-    </>
+          </>
+        ) : (
+          <>
+            <span className="min-w-0 truncate font-medium">{goal.title}</span>
+            <span className="shrink-0 text-mist/70">{progressLabel}</span>
+          </>
+        )}
+      </div>
+    </Html>
   )
 }
 
@@ -78,7 +84,7 @@ function useHoverLift(targetLift: number) {
   return ref
 }
 
-function TerracedIslandNode({ goal, onClick, focused, seedOverride, materialKind }: IslandProps & { focused: boolean }) {
+function TerracedIslandNode({ goal, onClick, focused, seedOverride, materialKind, labelHidden = false }: IslandProps & { focused: boolean }) {
   const [hovered, setHovered] = useState(false)
   // A tap has no pointer-out to end the hover, so a focus change always clears it.
   useEffect(() => setHovered(false), [focused])
@@ -109,8 +115,9 @@ function TerracedIslandNode({ goal, onClick, focused, seedOverride, materialKind
           onPointerOut={() => setHovered(false)}
         />
       </group>
-      {/* The focused island's details are in the roadmap panel, so it never shows the hover card over its label. */}
-      <Labels goal={goal} labelY={anchors.labelY} cardY={anchors.cardY} hovered={hovered && !focused} occlude={occluders} />
+      {/* The focused island's details are in the roadmap panel, so it never opens the hover card; while another
+          island is focused, this one's label steps aside so only the focused island is labelled. */}
+      {labelHidden ? null : <Label goal={goal} labelY={anchors.labelY} hovered={hovered && !focused} occlude={occluders} />}
     </group>
   )
 }

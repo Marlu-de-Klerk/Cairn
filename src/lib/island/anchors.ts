@@ -5,7 +5,6 @@ import { localToWorld } from './orientation'
 
 export interface IslandAnchors {
   readonly labelY: number
-  readonly cardY: number
   readonly hoverLift: number
   readonly focusTargetY: number
 }
@@ -19,7 +18,7 @@ export function islandAnchors(layout: IslandLayout): IslandAnchors {
     tallest = Math.max(tallest, p.y + height * p.scale - layout.summitTopY)
   }
   const labelY = Math.min(layout.summitTopY + tallest + 0.25, layout.summitTopY + 1.0)
-  return { labelY, cardY: labelY + 0.45, hoverLift: 0.15 * layout.summitTopY, focusTargetY: 0.4 * layout.summitTopY }
+  return { labelY, hoverLift: 0.15 * layout.summitTopY, focusTargetY: 0.4 * layout.summitTopY }
 }
 
 export interface FocusPoseOptions {

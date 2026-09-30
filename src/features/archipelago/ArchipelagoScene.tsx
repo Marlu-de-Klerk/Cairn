@@ -71,6 +71,7 @@ export function ArchipelagoScene({ showCompleted }: ArchipelagoSceneProps) {
             goal={goal}
             onClick={() => navigate(`/g/${goal.id}`)}
             focused={goal.id === focusedGoal?.id}
+            labelHidden={!!focusedGoal && goal.id !== focusedGoal.id}
           />
         ))}
         {focusedGoal ? (
