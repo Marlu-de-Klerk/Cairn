@@ -68,6 +68,8 @@ export function useGoals() {
   return useQuery({
     queryKey: ['goals', userId],
     enabled: !!userId,
+    // one quick retry, then say so: react-query's default three (with backoff) left ~7 s of silent empty sea
+    retry: 1,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('goals')

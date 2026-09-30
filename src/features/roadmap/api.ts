@@ -68,6 +68,7 @@ export function useMilestones(goalId: string | undefined) {
   return useQuery({
     queryKey: ['milestones', goalId],
     enabled: !!goalId,
+    retry: 1,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('milestones')
@@ -85,6 +86,7 @@ export function useProgressEntries(goalId: string | undefined) {
   return useQuery({
     queryKey: ['progress-entries', goalId],
     enabled: !!goalId,
+    retry: 1,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('progress_entries')

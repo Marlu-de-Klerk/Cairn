@@ -3,7 +3,9 @@ import { Link, useLocation, useMatch, useNavigate } from 'react-router'
 import { useGoals } from './api'
 import { useSession } from '../auth/useSession'
 import { supabase } from '../../lib/supabase'
+import { useProgress } from '@react-three/drei'
 import { EmptyArchipelago } from './EmptyArchipelago'
+import { LoadError, LoadingPill } from './LoadStates'
 import { NewGoalSheet } from './NewGoalSheet'
 import { RoadmapPanel } from '../roadmap/RoadmapPanel'
 
@@ -14,7 +16,9 @@ interface HomeOverlayProps {
 
 export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverlayProps) {
   const { session } = useSession()
-  const { data: goals, isLoading, isError, isFetching } = useGoals()
+  const { data: goals, isLoading, isError, isFetching, refetch } = useGoals()
+  // three's loading manager: island models (and the sea texture) still downloading
+  const { active: assetsLoading, progress: assetProgress } = useProgress()
   const focusedGoalId = useMatch('/g/:id')?.params.id
   const focusedGoal = goals?.find((g) => g.id === focusedGoalId) ?? null
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false)
@@ -75,6 +79,11 @@ export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverla
   const completedCount = goals?.filter((g) => g.status === 'completed').length ?? 0
   const showError = isError && !goals
   const isEmpty = !isLoading && !showError && activeCount === 0 && completedCount === 0
+  const loadingLabel = isLoading
+    ? 'Charting your archipelago…'
+    : !showError && !isEmpty && assetsLoading
+      ? `Loading islands ${Math.round(assetProgress)}%`
+      : null
 
   return (
     <div className="pointer-events-none relative flex h-full flex-col">
@@ -149,21 +158,20 @@ export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverla
             <span aria-hidden="true">←</span> All islands
           </button>
         ) : null}
-        {showMissingNotice ? (
-          <div className="pointer-events-none absolute inset-x-0 top-4 flex justify-center px-4">
+        <div className="pointer-events-none absolute inset-x-0 top-4 flex flex-col items-center gap-2 px-4">
+          {loadingLabel ? <LoadingPill label={loadingLabel} /> : null}
+          {showMissingNotice ? (
             <p role="status" className="pointer-events-auto animate-pop rounded-full border border-stone-light bg-stone/90 px-4 py-2 text-sm text-mist backdrop-blur-sm">
               That island couldn't be found.
             </p>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
         {showError ? (
-          <div className="pointer-events-none flex h-full items-center justify-center">
-            <div className="pointer-events-auto max-w-xs rounded-2xl border border-stone-light bg-stone/80 p-4 text-center text-sm text-mist backdrop-blur-sm">
-              <p>Couldn't load your archipelago. Try refreshing.</p>
-            </div>
+          <div className="pointer-events-none flex h-full items-center justify-center px-5">
+            <LoadError title="Couldn't load your archipelago." onRetry={() => refetch()} retrying={isFetching} />
           </div>
         ) : isEmpty ? (
-          <EmptyArchipelago />
+          <EmptyArchipelago onPlant={() => setNewGoalOpen(true)} />
         ) : null}
         {focusedGoal ? <RoadmapPanel key={focusedGoal.id} goal={focusedGoal} /> : null}
       </div>

@@ -47,8 +47,10 @@ function localIsoDate(date: Date = new Date()): string {
 }
 
 export function RoadmapPanel({ goal }: RoadmapPanelProps) {
-  const { data: milestones, isError: milestonesError } = useMilestones(goal.id)
-  const { data: entries, isError: entriesError } = useProgressEntries(goal.id)
+  const milestonesQuery = useMilestones(goal.id)
+  const entriesQuery = useProgressEntries(goal.id)
+  const { data: milestones, isError: milestonesError } = milestonesQuery
+  const { data: entries, isError: entriesError } = entriesQuery
   const markMilestoneDone = useMarkMilestoneDone(goal.id)
   const completeGoal = useCompleteGoal(goal.id)
   const addProgressEntry = useAddProgressEntry(goal.id)
@@ -87,10 +89,22 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
   const showDetails = !compact || expanded
 
   if (milestonesError || entriesError) {
+    const retrying = milestonesQuery.isFetching || entriesQuery.isFetching
     return (
-      <div className="pointer-events-auto absolute inset-x-0 bottom-0 border-t border-stone-light bg-stone/95 p-4 text-sm text-mist backdrop-blur-sm sm:inset-x-auto sm:bottom-4 sm:right-4 sm:w-72 sm:rounded-2xl sm:border sm:p-3">
+      <div role="alert" className="pointer-events-auto absolute inset-x-0 bottom-0 animate-rise border-t border-stone-light bg-stone/95 p-4 text-sm text-mist backdrop-blur-sm sm:inset-x-auto sm:bottom-4 sm:right-4 sm:w-72 sm:rounded-2xl sm:border sm:p-3">
         <p className="font-display text-base">{goal.title}</p>
-        <p className="mt-1 font-body text-xs text-mist/60">Couldn't load this goal's roadmap. Try refreshing.</p>
+        <p className="mt-1 font-body text-xs text-mist/70">Couldn't load this goal's trail. Check your connection, then try again.</p>
+        <button
+          type="button"
+          disabled={retrying}
+          onClick={() => {
+            if (milestonesError) milestonesQuery.refetch()
+            if (entriesError) entriesQuery.refetch()
+          }}
+          className="mt-2 w-full rounded-full bg-lantern px-3 py-1.5 text-xs font-medium text-ink disabled:opacity-60"
+        >
+          {retrying ? 'Trying again…' : 'Try again'}
+        </button>
       </div>
     )
   }

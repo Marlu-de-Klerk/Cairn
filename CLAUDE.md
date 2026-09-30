@@ -41,6 +41,7 @@ Shared helper functions (`owns_goal`, `goal_publicly_readable`, `entry_readable`
 - `db:types` uses `--project-id` (needs a one-time `npx supabase login`), not `--db-url` — this CLI version needs Docker/Podman to introspect a raw connection string, and requiring a container runtime for one npm script wasn't worth it. `SUPABASE_PROJECT_REF` in `.env` holds the ref.
 - `supabase/config.toml` is inert for this project — it's never used, because this project pushes migrations via `--db-url` and generates types via `--project-id` rather than running `supabase start`. The live project's actual auth redirect allow-list lives in the Supabase dashboard, not in this file — don't expect editing `config.toml` to affect the deployed project.
 - Full spec: `docs/superpowers/specs/2026-09-09-cairn-design.md`.
+- Hosting: Vercel (`vercel.json`) or Render (`render.yaml`), static build; env vars and the Supabase redirect-URL setup are in `docs/DEPLOY.md`.
 
 ## General conventions
 
