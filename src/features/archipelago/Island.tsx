@@ -12,6 +12,7 @@ import { useIslandBuild } from './terrain/islandCache'
 import type { LitMaterialKind } from './terrain/materials'
 import { TerracedIsland } from './TerracedIsland'
 import { useHullRegistry } from './hullRegistry'
+import { formatValue } from '../../lib/goalProgress'
 
 interface IslandProps {
   goal: Goal
@@ -33,8 +34,7 @@ function hexToCssColor(hex: number): string {
 
 function progressLabelFor(goal: Goal): string {
   if (goal.kind === 'numeric') {
-    const unit = goal.unit ? ` ${goal.unit}` : ''
-    return `${goal.currentValue}${unit} / ${goal.targetValue ?? '?'}${unit}`
+    return `${formatValue(goal.currentValue, goal.unit)} / ${goal.targetValue === null ? '?' : formatValue(goal.targetValue, goal.unit)}`
   }
   return goal.status === 'completed' ? 'Complete' : 'In progress'
 }

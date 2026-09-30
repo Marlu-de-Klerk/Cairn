@@ -8,6 +8,7 @@ import {
   useProgressEntries,
 } from './api'
 import type { Goal } from '../archipelago/api'
+import { formatEntryDate, formatValue, goalProgress } from '../../lib/goalProgress'
 
 interface RoadmapPanelProps {
   goal: Goal
@@ -51,6 +52,10 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
   if (!milestones || !entries) return null
 
   const step = nextStepToMark(goal, milestones)
+  const progress = goalProgress(goal, milestones)
+  const percent = Math.round(progress.fraction * 100)
+  // newest first, so a just-added update is at the top rather than below the fold
+  const journey = [...entries].reverse()
 
   const handleMarkDone = async () => {
     setErrorMessage(null)
@@ -109,15 +114,34 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
 
       <div className="rounded-md border border-stone-light bg-stone/90 p-3 text-sm text-mist backdrop-blur-sm">
         <p className="font-display text-base">{goal.title}</p>
+        {goal.description ? <p className="mt-0.5 text-xs text-mist/60">{goal.description}</p> : null}
+
+        <div
+          role="progressbar"
+          aria-label={`${goal.title} progress`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percent}
+          aria-valuetext={progress.summary}
+          className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-ink"
+        >
+          <div className="h-full rounded-full bg-lantern transition-[width] duration-500" style={{ width: `${percent}%` }} />
+        </div>
+        <div className="mt-1.5 flex items-baseline justify-between gap-2 text-xs">
+          <span className="text-mist/90">{progress.summary}</span>
+          <span className="text-mist/60">{percent}%</span>
+        </div>
+        {progress.next ? <p className="mt-0.5 text-xs text-mist/60">{progress.next}</p> : null}
 
         {step.kind !== 'done' ? (
           <button
             type="button"
             onClick={handleMarkDone}
+            aria-label={markDoneLabel}
             disabled={markMilestoneDone.isPending || completeGoal.isPending}
             className="mt-2 w-full rounded-md bg-lantern px-3 py-1.5 text-xs font-medium text-ink disabled:opacity-50"
           >
-            {markDoneLabel}
+            {step.kind === 'milestone' ? 'Mark done' : 'Complete goal'}
           </button>
         ) : (
           <p className="mt-2 text-xs font-medium text-lantern">Complete</p>
@@ -197,12 +221,15 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
         </button>
         {journeyOpen ? (
           <ul className="max-h-48 overflow-y-auto border-t border-stone-light px-3 py-2 text-xs">
-            {entries.map((entry) => (
+            {journey.length === 0 ? <li className="py-1.5 text-mist/60">Nothing logged yet. Mark a milestone or add an update.</li> : null}
+            {journey.map((entry) => (
               <li key={entry.id} className="border-b border-stone-light/60 py-1.5 last:border-0">
                 <p className="font-display text-sm">{entry.title}</p>
                 <p className="text-mist/60">
-                  {entry.occurredAt}
-                  {entry.value !== null ? ` — ${entry.value}${goal.unit ? ` ${goal.unit}` : ''}` : ''}
+                  {entry.kind === 'milestone' ? <span className="text-lantern/90">Milestone · </span> : null}
+                  {formatEntryDate(entry.occurredAt)}
+                  {/* a milestone's title already names its value */}
+                  {entry.kind === 'update' && entry.value !== null ? ` · ${formatValue(entry.value, goal.unit)}` : ''}
                 </p>
                 {entry.note ? <p className="mt-0.5 text-mist/40">{entry.note}</p> : null}
               </li>
