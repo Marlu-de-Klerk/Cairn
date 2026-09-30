@@ -492,6 +492,46 @@ def build_water():
     return parts
 
 
+# ---------------------------------------------------------------------------------------------------------- flow tags
+# Parts of the model that move in the app (falls, streams, lava, flames, smoke, splashes) carry a 'flow' UV:
+#   u = along / FLOW_SPAN  where `along` is the distance along the flow (or height above a flame/plume base), and
+#   v = kind / 8           with the FLOW_* kinds below.
+# Everything else has (0, 0) and stays still. Both are kept inside [0, 1] so gltf-transform's texcoord quantisation
+# stores them exactly (no texture transform to carry an offset). The glTF exporter flips V, so the app reads the kind
+# from 1 - v (terrain/materials.ts, FLOW_DECODE).
+FLOW_STATIC, FLOW_WATER, FLOW_LAVA, FLOW_FLAME, FLOW_SMOKE, FLOW_PULSE = 0, 1, 2, 3, 4, 5
+FLOW_SPAN = 8.0
+FLOW_TAG = [None]  # (kind, along(co) -> float), set by flowing()
+FLUID = [FLOW_WATER]  # what cascade()'s streams and falls are made of; the volcano sets FLOW_LAVA
+
+
+class flowing:
+    """with flowing(kind, along): every face written to a Sink inside the block is tagged. along(co) takes a vertex's
+    Blender-frame position (z up; layout z is -co.y)."""
+
+    def __init__(self, kind, along=lambda co: 0.0):
+        self.tag = (kind, along)
+
+    def __enter__(self):
+        self.prev = FLOW_TAG[0]
+        FLOW_TAG[0] = self.tag
+
+    def __exit__(self, *exc):
+        FLOW_TAG[0] = self.prev
+
+
+def tag_faces(bm, faces, tag=None):
+    """Writes the flow UV on faces (the active flowing() tag unless one is given)."""
+    tag = tag or FLOW_TAG[0]
+    if tag is None:
+        return
+    kind, along = tag
+    layer = bm.loops.layers.uv.get('flow') or bm.loops.layers.uv.new('flow')
+    for f in faces:
+        for loop in f.loops:
+            loop[layer].uv = (max(0.0, min(1.0, along(loop.vert.co) / FLOW_SPAN)), kind / 8)
+
+
 # ---------------------------------------------------------------------------------------------------------- props
 # Every builder writes straight into a shared bmesh through a local→world matrix M (Blender frame, z up, base at 0).
 
@@ -507,12 +547,18 @@ class Sink:
         f = self.bm.faces.new(vs)
         for loop in f.loops:
             loop[self.layer] = c
+        tag_faces(self.bm, [f])
         if double:
             vs2 = [self.bm.verts.new(M @ Vector(p)) for p in reversed(pts)]
             f2 = self.bm.faces.new(vs2)
             for loop in f2.loops:
                 loop[self.layer] = c
+            tag_faces(self.bm, [f2])
         return f
+
+    def tag(self, faces, bm=None):
+        """Tags faces made directly on this sink's bmesh (bm.faces.new) with the active flowing() tag."""
+        tag_faces(bm or self.bm, faces)
 
     def cyl(self, M, pts, radii, sides, colours, cap_top=None):
         """Tube through local points pts with per-point radii; colours[i] colours the segment above point i."""
@@ -545,6 +591,7 @@ class Sink:
             v.co = Vector((v.co.x, v.co.y, v.co.z * squash)) * (1 + jitter * n) + Vector(centre)
             v.co = M @ v.co
         faces = {f for v in verts for f in v.link_faces}
+        tag_faces(bm, faces)
         for f in faces:
             f.normal_update()
             f.smooth = smooth
@@ -638,7 +685,7 @@ def box(sink, M, lo, hi, top, side, bottom=None):
         sink.face(M, [v[i] for i in idx], c)
 
 
-def curve_ribbon(points, width, colour, name='ribbon', thickness=0.004, resolution=6):
+def curve_ribbon(points, width, colour, name='ribbon', thickness=0.004, resolution=6, flow=None):
     """A smooth rounded ribbon along layout-frame points (x, y, z), built as a bevelled, extruded Bezier curve and
     converted to a mesh; colour(t) gives the vertex colour at fraction t along it. Returns a finished object with a
     'Col' corner attribute, ready for finish(extra_...)."""
@@ -701,6 +748,21 @@ def curve_ribbon(points, width, colour, name='ribbon', thickness=0.004, resoluti
                 if d < best:
                     best, bt = d, (i + t) / n
             loop[layer] = colour(bt)
+    if flow is not None:  # tag the ribbon as flowing from its first point to its last
+        length = sum((pts[i + 1] - pts[i]).length for i in range(n))
+        uv = bm.loops.layers.uv.new('flow')
+        for f in bm.faces:
+            for loop in f.loops:
+                co = loop.vert.co
+                best, bt = 9e9, 0.0
+                for i in range(n):
+                    a, b = pts[i], pts[i + 1]
+                    ab = b - a
+                    t = max(0.0, min(1.0, (co - a).dot(ab) / (ab.length_squared or 1)))
+                    d = (a + ab * t - co).length
+                    if d < best:
+                        best, bt = d, (i + t) / n
+                loop[uv].uv = (min(1.0, bt * length / FLOW_SPAN), flow / 8)
     bm.to_mesh(me)
     bm.free()
     out = bpy.data.objects.new(name, me)
@@ -730,10 +792,12 @@ def campfire(sink, unlit, M, r):
         a = math.pi * i / 3
         d = Vector((math.cos(a), math.sin(a), 0)) * 0.06
         sink.cyl(M, [tuple(-d + Vector((0, 0, 0.01))), tuple(d + Vector((0, 0, 0.025)))], [0.01, 0.01], 5, [col(FOL['log'])])
-    for (x, y, hh, rr, c) in ((0, 0, 0.1, 0.035, col(FOL['ember'])), (0.012, 0.01, 0.07, 0.02, col('#FFD27A'))):
-        for k in range(5):
-            a0, a1 = 2 * math.pi * k / 5, 2 * math.pi * (k + 1) / 5
-            unlit.face(M, [(x + math.cos(a0) * rr, y + math.sin(a0) * rr, 0.02), (x + math.cos(a1) * rr, y + math.sin(a1) * rr, 0.02), (x, y, 0.02 + hh)], c)
+    base = (M @ Vector((0, 0, 0.02))).z
+    with flowing(FLOW_FLAME, lambda co: (co.z - base) * 20):  # 0 at the flame's base .. ~2 at its tip
+        for (x, y, hh, rr, c) in ((0, 0, 0.1, 0.035, col(FOL['ember'])), (0.012, 0.01, 0.07, 0.02, col('#FFD27A'))):
+            for k in range(5):
+                a0, a1 = 2 * math.pi * k / 5, 2 * math.pi * (k + 1) / 5
+                unlit.face(M, [(x + math.cos(a0) * rr, y + math.sin(a0) * rr, 0.02), (x + math.cos(a1) * rr, y + math.sin(a1) * rr, 0.02), (x, y, 0.02 + hh)], c)
 
 
 def summit_cairn(sink, M, r):
@@ -904,22 +968,26 @@ def fall_ribbon(unlit, pts, width, name_seed):
     """Waterfall strip through world points pts (layout frame, top to bottom), offset just outside the wall."""
     fall = col(PAL['fall'])
     streak = mix(fall, col(PAL['fallStreak']), 0.45)
-    for i in range(len(pts) - 1):
-        (x0, y0, z0, nx0, nz0), (x1, y1, z1, nx1, nz1) = pts[i], pts[i + 1]
-        stripes = 5
-        for k in range(stripes):
-            u0, u1 = -width / 2 + width * k / stripes, -width / 2 + width * (k + 1) / stripes
-            c = streak if (k + i) % 3 == 0 else fall
-            q = [P(x0 - nz0 * u0, y0, z0 + nx0 * u0), P(x0 - nz0 * u1, y0, z0 + nx0 * u1), P(x1 - nz1 * u1, y1, z1 + nx1 * u1), P(x1 - nz1 * u0, y1, z1 + nx1 * u0)]
-            unlit.face(Matrix.Identity(4), [tuple(v) for v in q], c, double=True)
+    top = P(*pts[0][:3]).z
+    with flowing(FLUID[0], lambda co: top - co.z):  # distance fallen
+        for i in range(len(pts) - 1):
+            (x0, y0, z0, nx0, nz0), (x1, y1, z1, nx1, nz1) = pts[i], pts[i + 1]
+            stripes = 5
+            for k in range(stripes):
+                u0, u1 = -width / 2 + width * k / stripes, -width / 2 + width * (k + 1) / stripes
+                c = streak if (k + i) % 3 == 0 else fall
+                q = [P(x0 - nz0 * u0, y0, z0 + nx0 * u0), P(x0 - nz0 * u1, y0, z0 + nx0 * u1), P(x1 - nz1 * u1, y1, z1 + nx1 * u1), P(x1 - nz1 * u0, y1, z1 + nx1 * u0)]
+                unlit.face(Matrix.Identity(4), [tuple(v) for v in q], c, double=True)
 
 
 def splash(unlit, x, z, y, r):
-    for k in range(5):
-        a = 2 * math.pi * k / 5 + 0.3
-        cx, cz = x + math.cos(a) * r * 0.6, z + math.sin(a) * r * 0.6
-        pts = [(cx + math.cos(t) * r * 0.55, cz + math.sin(t) * r * 0.55) for t in [2 * math.pi * m / 8 for m in range(8)]]
-        unlit.face(Matrix.Identity(4), [tuple(P(px, y + 0.004 + 0.002 * k, pz)) for px, pz in pts][::-1], col(PAL['foam']))
+    seed = (x * 7.1 + z * 3.3) % 1.0  # each splash pulses out of step with the others
+    with flowing(FLOW_PULSE, lambda co: seed * FLOW_SPAN):
+        for k in range(5):
+            a = 2 * math.pi * k / 5 + 0.3
+            cx, cz = x + math.cos(a) * r * 0.6, z + math.sin(a) * r * 0.6
+            pts = [(cx + math.cos(t) * r * 0.55, cz + math.sin(t) * r * 0.55) for t in [2 * math.pi * m / 8 for m in range(8)]]
+            unlit.face(Matrix.Identity(4), [tuple(P(px, y + 0.004 + 0.002 * k, pz)) for px, pz in pts][::-1], col(PAL['foam']))
 
 
 def stream(unlit, x0, z0, x1, z1, y, width=0.1):
@@ -932,11 +1000,12 @@ def stream(unlit, x0, z0, x1, z1, y, width=0.1):
     dx, dz = (x1 - x0) / length, (z1 - z0) / length
     nx, nz = -dz * width / 2, dx * width / 2
     steps = max(1, int(length / 0.08))
-    for k in range(steps):
-        a, b = k / steps, (k + 1) / steps
-        ax, az, bx, bz = x0 + (x1 - x0) * a, z0 + (z1 - z0) * a, x0 + (x1 - x0) * b, z0 + (z1 - z0) * b
-        q = [P(ax + nx, y, az + nz), P(ax - nx, y, az - nz), P(bx - nx, y, bz - nz), P(bx + nx, y, bz + nz)]
-        unlit.face(Matrix.Identity(4), [tuple(v) for v in q], streak if k % 3 == 0 else fall, double=True)
+    with flowing(FLUID[0], lambda co: (co.x - x0) * dx + (-co.y - z0) * dz):  # distance downstream
+        for k in range(steps):
+            a, b = k / steps, (k + 1) / steps
+            ax, az, bx, bz = x0 + (x1 - x0) * a, z0 + (z1 - z0) * a, x0 + (x1 - x0) * b, z0 + (z1 - z0) * b
+            q = [P(ax + nx, y, az + nz), P(ax - nx, y, az - nz), P(bx - nx, y, bz - nz), P(bx + nx, y, bz + nz)]
+            unlit.face(Matrix.Identity(4), [tuple(v) for v in q], streak if k % 3 == 0 else fall, double=True)
 
 
 def cascade(ground, unlit, x, z, dx, dz):

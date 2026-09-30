@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import island_core  # noqa: E402
 
 island_core.init('volcano')
+island_core.FLUID[0] = island_core.FLOW_LAVA  # cascade()'s streams and falls here are lava
 from island_core import *  # noqa: E402,F401,F403
 
 EXTRA_SOFT, EXTRA_UNLIT = [], []  # finished objects joined into the Soft / Unlit meshes
@@ -137,10 +138,14 @@ def hardy_fern(sink, M, h, r):
 def steam_vent(sink, unlit, M, r):
     """A fumarole: a yellow sulphur crust, a glowing slot and a small column of steam."""
     sink.blob(M, (0, 0, -0.004), 0.04, col(VO['sulphur']), col('#B8A548'), col('#8E7E38'), subdiv=1, squash=0.25, jitter=0.2, seed=r.uniform(0, 9))
-    unlit.face(M, [(-0.012, -0.004, 0.006), (0.012, -0.004, 0.006), (0.012, 0.004, 0.006), (-0.012, 0.004, 0.006)], col(VO['lavaHot']))
-    for k in range(3):
-        s = 0.018 + 0.01 * k
-        sink.blob(M, (0.006 * k, 0.004 * k, 0.03 + 0.045 * k), s, col(VO['steam']), col('#E3E3E0'), col('#C9C9C6'), subdiv=1, squash=0.85, jitter=0.12, seed=k + r.uniform(0, 9), smooth=True)
+    seed = r.random()
+    with flowing(FLOW_PULSE, lambda co: seed * FLOW_SPAN):
+        unlit.face(M, [(-0.012, -0.004, 0.006), (0.012, -0.004, 0.006), (0.012, 0.004, 0.006), (-0.012, 0.004, 0.006)], col(VO['lavaHot']))
+    base = M.translation.z
+    with flowing(FLOW_SMOKE, lambda co: (co.z - base) * 6):
+        for k in range(3):
+            s = 0.018 + 0.01 * k
+            sink.blob(M, (0.006 * k, 0.004 * k, 0.03 + 0.045 * k), s, col(VO['steam']), col('#E3E3E0'), col('#C9C9C6'), subdiv=1, squash=0.85, jitter=0.12, seed=k + r.uniform(0, 9), smooth=True)
 
 
 def expedition_tent(sink, M, r):
@@ -184,10 +189,12 @@ def sea_rocks(sink, unlit):
 # ---------------------------------------------------------------------------------------------------------- the cone and lava
 
 def smoke_plume(sink, M, r):
-    for k in range(6):
-        s = 0.05 + 0.022 * k
-        c = mix(col(VO['smoke']), col(VO['smokeLight']), k / 6)
-        sink.blob(M, (0.012 * k * k, 0.02 * k, 0.08 + 0.09 * k), s, mix(c, col('#FFFFFF'), 0.2), c, mix(c, col('#000000'), 0.2), subdiv=2, squash=0.8, jitter=0.12, seed=k * 3.1, smooth=True)
+    base = M.translation.z
+    with flowing(FLOW_SMOKE, lambda co: (co.z - base) * 2.5):
+        for k in range(6):
+            s = 0.05 + 0.022 * k
+            c = mix(col(VO['smoke']), col(VO['smokeLight']), k / 6)
+            sink.blob(M, (0.012 * k * k, 0.02 * k, 0.08 + 0.09 * k), s, mix(c, col('#FFFFFF'), 0.2), c, mix(c, col('#000000'), 0.2), subdiv=2, squash=0.8, jitter=0.12, seed=k * 3.1, smooth=True)
 
 
 def crater_cone(sink, unlit, M, base_r, height, crater_r):
@@ -230,10 +237,11 @@ def crater_cone(sink, unlit, M, base_r, height, crater_r):
     # the lava lake, unlit so it glows
     centre = M @ Vector((0, 0, height - 0.075))
     rings_l = [[M @ Vector((math.cos(2 * math.pi * i / sides) * crater_r * s, math.sin(2 * math.pi * i / sides) * crater_r * s, height - 0.075)) for i in range(sides)] for s in (0.86, 0.5)]
-    for i in range(sides):
-        j = (i + 1) % sides
-        unlit.face(Matrix.Identity(4), [tuple(rings_l[0][i]), tuple(rings_l[0][j]), tuple(rings_l[1][j]), tuple(rings_l[1][i])], col(VO['lava']), double=True)
-        unlit.face(Matrix.Identity(4), [tuple(rings_l[1][i]), tuple(rings_l[1][j]), tuple(centre)], col(VO['lavaHot']), double=True)
+    with flowing(FLOW_LAVA, lambda co: (co - centre).length * 4):  # churning outward from the middle
+        for i in range(sides):
+            j = (i + 1) % sides
+            unlit.face(Matrix.Identity(4), [tuple(rings_l[0][i]), tuple(rings_l[0][j]), tuple(rings_l[1][j]), tuple(rings_l[1][i])], col(VO['lava']), double=True)
+            unlit.face(Matrix.Identity(4), [tuple(rings_l[1][i]), tuple(rings_l[1][j]), tuple(centre)], col(VO['lavaHot']), double=True)
     EXTRA_SOFT.append(smoothed(bm, 'cone', levels=2))
 
 
@@ -323,11 +331,13 @@ def lava_cracks(ground, unlit):
             if len(chain) < 4:
                 continue
             made += 1
-            for k in range(len(chain) - 1):
-                a, b = chain[k], chain[k + 1]
-                wdt = 0.007 * (1 - k / len(chain)) + 0.002
-                sd = Vector((-nz, 0, nx)) * wdt
-                unlit.face(Matrix.Identity(4), [tuple(P(*(a + sd))), tuple(P(*(a - sd))), tuple(P(*(b - sd))), tuple(P(*(b + sd)))], col(VO['lavaHot']) if k % 2 else col(VO['lava']), double=True)
+            top = hi
+            with flowing(FLOW_LAVA, lambda co: top - co.z):
+                for k in range(len(chain) - 1):
+                    a, b = chain[k], chain[k + 1]
+                    wdt = 0.007 * (1 - k / len(chain)) + 0.002
+                    sd = Vector((-nz, 0, nx)) * wdt
+                    unlit.face(Matrix.Identity(4), [tuple(P(*(a + sd))), tuple(P(*(a - sd))), tuple(P(*(b - sd))), tuple(P(*(b + sd)))], col(VO['lavaHot']) if k % 2 else col(VO['lava']), double=True)
 
 
 def lava_pool(unlit, sink, x, z, y, r):
@@ -343,6 +353,8 @@ def lava_pool(unlit, sink, x, z, y, r):
             f = unlit.bm.faces.new((verts[rr][i], verts[rr + 1][i], verts[rr + 1][j], verts[rr][j]))
             for loop in f.loops:
                 loop[unlit.layer] = rings[rr][1] if loop.vert in (verts[rr][i], verts[rr][j]) else rings[rr + 1][1]
+            with flowing(FLOW_LAVA, lambda co: (Vector((co.x, co.y)) - Vector((x, -z))).length * 4):  # churning outward
+                unlit.tag([f])
             f.normal_update()
             if f.normal.z < 0:
                 f.normal_flip()
@@ -352,7 +364,8 @@ def lava_pool(unlit, sink, x, z, y, r):
         sink.blob(frame(px + math.cos(a) * 0.02, pz + math.sin(a) * 0.02, y - 0.008), (0, 0, 0), rng.uniform(0.02, 0.032), col(VO['basaltLit']), col(VO['basalt']), col(VO['basaltDark']), subdiv=0, squash=0.5, jitter=0.2, seed=k)
     for k in range(3):  # steam
         a = rng.uniform(0, 2 * math.pi)
-        sink.blob(frame(x + math.cos(a) * r * 0.5, z + math.sin(a) * r * 0.5, y + 0.05 + 0.04 * k), (0, 0, 0), 0.03 + 0.012 * k, col(VO['steam']), col('#E3E3E0'), col('#C9C9C6'), subdiv=1, squash=0.8, jitter=0.1, seed=k, smooth=True)
+        with flowing(FLOW_SMOKE, lambda co, b=y: (co.z - b) * 6):
+            sink.blob(frame(x + math.cos(a) * r * 0.5, z + math.sin(a) * r * 0.5, y + 0.05 + 0.04 * k), (0, 0, 0), 0.03 + 0.012 * k, col(VO['steam']), col('#E3E3E0'), col('#C9C9C6'), subdiv=1, squash=0.8, jitter=0.1, seed=k, smooth=True)
 
 
 def cone_flow(ground, unlit, cone):
@@ -397,7 +410,7 @@ def cone_flow(ground, unlit, cone):
         t = 1 - ((d - lip) / (base - lip)) ** (1 / 3) if d > lip else 1.0
         wig = 0.04 * math.sin(u * 7.0) * u
         pts.append((x + dx * d + side[0] * wig, foot + 0.02 + height * t + 0.018, z + dz * d + side[1] * wig))
-    EXTRA_UNLIT.append(curve_ribbon(pts, 0.035, lambda t: mix(col(VO['lavaHot']), col(VO['lavaDeep']), t ** 0.7), 'coneLava', thickness=0.006))
+    EXTRA_UNLIT.append(curve_ribbon(pts, 0.035, lambda t: mix(col(VO['lavaHot']), col(VO['lavaDeep']), t ** 0.7), 'coneLava', thickness=0.006, flow=FLOW_LAVA))
     cascade(ground, unlit, x + dx * (base - 0.02), z + dz * (base - 0.02), dx, dz)
     print('cone flow', round(math.degrees(a)))
 
