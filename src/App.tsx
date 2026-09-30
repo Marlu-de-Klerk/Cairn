@@ -6,6 +6,7 @@ import { RequireAuth } from './features/auth/RequireAuth'
 import { ArchipelagoScene } from './features/archipelago/ArchipelagoScene'
 import { HomeOverlay } from './features/archipelago/HomeOverlay'
 import { NotFoundPage } from './features/NotFoundPage'
+import { Toaster } from './features/toast/Toaster'
 
 // DEV-only harnesses: lazy so production builds tree-shake them out entirely.
 const DevIslandView = import.meta.env.DEV ? lazy(() => import('./features/dev/DevIslandView').then((m) => ({ default: m.DevIslandView }))) : null
@@ -44,6 +45,7 @@ export function App() {
                 />
                 <Route path="*" element={<NotFoundPage />} />
               </Routes>
+              <Toaster />
             </div>
           </RequireAuth>
         }

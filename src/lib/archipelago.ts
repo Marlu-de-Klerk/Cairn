@@ -41,3 +41,16 @@ export function islandPosition(index: number, archipelagoSeed: number): IslandPo
     rotation,
   }
 }
+
+/**
+ * The spiral index for a new island: the first whose position no existing island occupies. Counting the goals
+ * isn't enough once a goal can be deleted: with island 2 of 7 gone, a count of 6 would put the new island on top of
+ * island 6. The first free index fills the gap instead. Positions are compared with a tolerance well under the
+ * spacing between islands, so float round trips through the database never matter.
+ */
+export function nextIslandIndex(existing: readonly { readonly x: number; readonly z: number }[], archipelagoSeed: number): number {
+  for (let index = 0; ; index++) {
+    const p = islandPosition(index, archipelagoSeed)
+    if (!existing.some((e) => Math.hypot(e.x - p.x, e.z - p.z) < 0.5)) return index
+  }
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { islandPosition } from './archipelago'
+import { islandPosition, nextIslandIndex } from './archipelago'
 
 describe('islandPosition', () => {
   it('is deterministic — same index and seed always produce the same position', () => {
@@ -50,5 +50,26 @@ describe('islandPosition', () => {
       expect(rotation).toBeGreaterThanOrEqual(0)
       expect(rotation).toBeLessThan(2 * Math.PI)
     }
+  })
+})
+
+describe('nextIslandIndex', () => {
+  const at = (i: number) => {
+    const p = islandPosition(i, 42)
+    return { x: p.x, z: p.z }
+  }
+
+  it('continues the spiral when nothing has been deleted', () => {
+    expect(nextIslandIndex([], 42)).toBe(0)
+    expect(nextIslandIndex([0, 1, 2].map(at), 42)).toBe(3)
+  })
+
+  it('fills the gap a deleted island left, instead of landing on the last island', () => {
+    expect(nextIslandIndex([0, 1, 3, 4, 5, 6].map(at), 42)).toBe(2)
+  })
+
+  it('tolerates positions that came back from the database slightly rounded', () => {
+    const rounded = [0, 1].map(at).map((p) => ({ x: Math.round(p.x * 1e4) / 1e4, z: Math.round(p.z * 1e4) / 1e4 }))
+    expect(nextIslandIndex(rounded, 42)).toBe(2)
   })
 })

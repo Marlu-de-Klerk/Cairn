@@ -6,7 +6,11 @@ import {
   useMarkMilestoneDone,
   useMilestones,
   useProgressEntries,
+  useUndoMark,
 } from './api'
+import type { MarkUndo } from './api'
+import { showToast } from '../toast/toast'
+import { EditGoalSheet } from './EditGoalSheet'
 import type { Goal } from '../archipelago/api'
 import { formatEntryDate, formatValue, goalProgress } from '../../lib/goalProgress'
 import { setSheetInset } from './sheetInset'
@@ -46,6 +50,7 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
   const markMilestoneDone = useMarkMilestoneDone(goal.id)
   const completeGoal = useCompleteGoal(goal.id)
   const addProgressEntry = useAddProgressEntry(goal.id)
+  const undoMark = useUndoMark(goal.id)
 
   const [journeyOpen, setJourneyOpen] = useState(false)
   const [updateFormOpen, setUpdateFormOpen] = useState(false)
@@ -55,6 +60,7 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
   const [updateDate, setUpdateDate] = useState(localIsoDate())
   const [celebrating, setCelebrating] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
 
   // On a phone the sheet reports its collapsed height, so the camera frames the island above it. Expanding it
   // for details doesn't reframe: the island stays put under the taller sheet until it collapses again.
@@ -98,10 +104,13 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
   const handleMarkDone = async () => {
     setErrorMessage(null)
     try {
+      // Every mark can be taken back for a few seconds, in case of a mis-tap.
+      const offerUndo = (message: string, undo: MarkUndo) =>
+        showToast(message, { label: 'Undo', run: () => undoMark.mutateAsync(undo) })
       if (step.kind === 'milestone') {
-        await markMilestoneDone.mutateAsync(step.milestone)
+        offerUndo(`Marked ${step.milestone.title} done.`, await markMilestoneDone.mutateAsync({ milestone: step.milestone, previousValue: goal.currentValue }))
       } else if (step.kind === 'final-target') {
-        await completeGoal.mutateAsync(goal)
+        offerUndo(`${goal.title} complete.`, await completeGoal.mutateAsync(goal))
         // The banner is static, so it shows regardless of prefers-reduced-motion —
         // reduced motion skips the animation, not the acknowledgment. Gate any
         // future animated flourish on celebrationEnabled() from './celebrate'.
@@ -278,6 +287,13 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
               Add update
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="mt-1.5 w-full rounded-md px-3 py-1.5 text-xs text-mist/70 hover:text-mist"
+          >
+            Edit goal
+          </button>
           </>
         ) : null}
 
@@ -318,6 +334,7 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
           ) : null}
         </div>
       ) : null}
+      <EditGoalSheet goal={goal} milestones={milestones} open={editing} onOpenChange={setEditing} />
     </div>
   )
 }
