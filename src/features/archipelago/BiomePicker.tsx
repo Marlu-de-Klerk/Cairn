@@ -8,6 +8,7 @@ import { useIslandBuild } from './terrain/islandCache'
 import { TerracedIsland } from './TerracedIsland'
 import { HullRegistryProvider } from './hullRegistry'
 import { islandLayoutSeed } from '../../lib/island/fixedIslands'
+import { noPointerEvents } from './noPointerEvents'
 
 const BIOMES: { key: Goal['biome']; label: string }[] = [
   { key: 'jungle', label: 'Jungle' },
@@ -65,10 +66,11 @@ export function BiomePicker({ value, onChange }: BiomePickerProps) {
           draws. Placement goes in `style`: <Canvas> sets an inline position
           and pointer-events on its wrapper that would beat classes. It
           renders no interactive 3D content (each card's own <button> handles
-          clicks), so it needs no eventSource. */}
+          clicks), so it takes no pointer events at all. */}
       <Canvas
         style={{ position: 'fixed', inset: 0, zIndex: -10, pointerEvents: 'none' }}
         dpr={[1, 1.5]}
+        events={noPointerEvents}
         gl={{ antialias: true }}
       >
         <View.Port />

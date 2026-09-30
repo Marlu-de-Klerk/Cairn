@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLocation, useMatch, useNavigate } from 'react-router'
+import { Link, useLocation, useMatch, useNavigate } from 'react-router'
 import { useGoals } from './api'
 import { useSession } from '../auth/useSession'
 import { supabase } from '../../lib/supabase'
@@ -38,6 +38,20 @@ export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverla
     return () => clearTimeout(timer)
   }, [showMissingNotice, location.key])
 
+  // Escape leaves a focused island for the overview, unless it's closing the menu or the new-goal sheet, or the user
+  // is typing in a field (where Escape belongs to the field).
+  useEffect(() => {
+    if (!focusedGoalId || avatarMenuOpen || newGoalOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      const target = event.target as HTMLElement | null
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
+      navigate('/')
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [focusedGoalId, avatarMenuOpen, newGoalOpen, navigate])
+
   // The account menu closes on Escape (handing focus back to its button) or on a press anywhere outside it.
   useEffect(() => {
     if (!avatarMenuOpen) return
@@ -65,7 +79,9 @@ export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverla
   return (
     <div className="pointer-events-none relative flex h-full flex-col">
       <header className="pointer-events-auto flex items-center justify-between bg-stone/80 p-4 backdrop-blur-sm">
-        <span className="font-display text-lg text-mist">Cairn</span>
+        <Link to="/" className="rounded font-display text-lg text-mist">
+          Cairn
+        </Link>
 
         <div className="flex items-center gap-2 font-body">
           {completedCount > 0 ? (
@@ -124,6 +140,15 @@ export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverla
       </header>
 
       <div className="pointer-events-none relative flex-1 font-body">
+        {focusedGoalId ? (
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="pointer-events-auto absolute left-4 top-4 flex items-center gap-1.5 rounded-md border border-stone-light bg-stone/90 px-3 py-2 text-sm text-mist shadow-lg backdrop-blur-sm hover:bg-stone-light"
+          >
+            <span aria-hidden="true">←</span> All islands
+          </button>
+        ) : null}
         {showMissingNotice ? (
           <div className="pointer-events-none absolute inset-x-0 top-4 flex justify-center px-4">
             <p role="status" className="pointer-events-auto rounded-md border border-stone-light bg-stone/90 px-4 py-2 text-sm text-mist backdrop-blur-sm">

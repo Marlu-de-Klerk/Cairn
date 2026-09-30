@@ -6,6 +6,7 @@ import { ISLAND_YAW } from '../../lib/island/orientation'
 import { getIslandLayout } from './terrain/islandCache'
 import type { Goal } from './api'
 import { islandLayoutSeed } from '../../lib/island/fixedIslands'
+import { noPointerEvents } from './noPointerEvents'
 
 const MAX_MILESTONES = 8
 
@@ -93,7 +94,7 @@ function TrailPreview({ count }: { count: number }) {
 
   return (
     <div className="h-28 overflow-hidden rounded-md border border-stone-light bg-ink">
-      <Canvas camera={{ position: [5.2, 4.4, 5.2], fov: 40 }} frameloop="demand" flat onCreated={({ camera }) => camera.lookAt(0, 0.9, 0)}>
+      <Canvas camera={{ position: [5.2, 4.4, 5.2], fov: 40 }} frameloop="demand" flat events={noPointerEvents} onCreated={({ camera }) => camera.lookAt(0, 0.9, 0)}>
         <group rotation={[0, ISLAND_YAW, 0]}>
           <mesh geometry={ribbon}>
             <meshBasicMaterial color={SHARED_PALETTE.trailDone} transparent opacity={0.3} depthWrite={false} />
