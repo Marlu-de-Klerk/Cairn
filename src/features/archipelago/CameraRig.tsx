@@ -9,6 +9,7 @@ import { islandLayoutSeed } from '../../lib/island/fixedIslands'
 import { getIslandLayout } from './terrain/islandCache'
 import { OVERVIEW_ZOOM, clampZoom, easeZoom, stepFocusZoom, wheelFactor } from '../../lib/cameraZoom'
 import { overviewFrame } from '../../lib/overviewFrame'
+import { getSheetInset, subscribeSheetInset } from '../roadmap/sheetInset'
 
 const ORBIT_SPEED = 0.05 // radians/second while idle
 const DRAG_SENSITIVITY = 0.005 // radians per pixel of horizontal drag
@@ -16,6 +17,7 @@ const FLY_DURATION = 1.2 // seconds, spec §6.3
 const DRAG_CLICK_THRESHOLD = 5 // px of travel past which a gesture is a drag, not a click
 const PANEL_WIDTH_PX = 288 // RoadmapPanel's w-72
 const PANEL_MIN_VIEWPORT_PX = 640
+const FOCUS_INSET_TOP_PX = 72 // the header
 const OVERVIEW_INSET_TOP_PX = 100 // the header, plus room for the labels above the farthest islands
 const FRAME_EASE = 3 // per second: how fast the overview reframes when an island is added or the window resizes
 
@@ -63,6 +65,9 @@ export function CameraRig({ focusedGoal, islands = NO_ISLANDS, initialAzimuth, s
   const frameCenter = useRef<Vector3 | null>(null)
   const frameDistance = useRef(0)
   const frameElevation = useRef(0)
+  // The phone roadmap sheet's height, eased so the island glides up when the sheet appears.
+  const sheetInset = useRef(getSheetInset())
+  useEffect(() => subscribeSheetInset(invalidate), [invalidate])
   const azimuth = useRef(0)
   // Spec §5.6.1: the focus orbit is separate from the overview azimuth, so orbiting an island never moves where the
   // overview returns to.
@@ -259,6 +264,11 @@ export function CameraRig({ focusedGoal, islands = NO_ISLANDS, initialAzimuth, s
       if (frameCenter.current.distanceTo(target) > 1e-3 || Math.abs(frame.distance - frameDistance.current) > 1e-3) invalidate()
     }
 
+    const sheetTarget = getSheetInset()
+    sheetInset.current += (sheetTarget - sheetInset.current) * (1 - Math.exp(-delta * 8))
+    if (Math.abs(sheetTarget - sheetInset.current) > 0.5) invalidate()
+    else sheetInset.current = sheetTarget
+
     const isTransitioning = transitionStart.current !== null
     orbitEnabled.current = focusedGoal !== null && !isTransitioning && devOrbit === undefined
 
@@ -276,6 +286,8 @@ export function CameraRig({ focusedGoal, islands = NO_ISLANDS, initialAzimuth, s
         aspect: size.width / Math.max(1, size.height),
         fovDeg: (camera as PerspectiveCamera).fov,
         insetRightPx: size.width >= PANEL_MIN_VIEWPORT_PX ? PANEL_WIDTH_PX : 0,
+        insetTopPx: FOCUS_INSET_TOP_PX,
+        insetBottomPx: sheetInset.current,
         viewportPx: size,
         orbit: devOrbit ?? orbit.current,
       })

@@ -25,6 +25,9 @@ export interface FocusPoseOptions {
   readonly aspect: number
   readonly fovDeg: number
   readonly insetRightPx: number
+  /** Screen pixels covered at the top (the header) and bottom (the roadmap sheet on a phone). */
+  readonly insetTopPx?: number
+  readonly insetBottomPx?: number
   readonly viewportPx: { readonly width: number; readonly height: number }
   readonly orbit: number
 }
@@ -53,7 +56,7 @@ const norm = (a: V): V => {
 
 /**
  * Spec §5.6: true 38° elevation, arrival azimuth world +X+Z plus the viewer's orbit, distance fitted so the island's
- * bounding cylinder stays inside ±0.88 NDC of the area the RoadmapPanel leaves free, clamped to [7, 17].
+ * bounding cylinder stays inside ±0.88 NDC of the area the header and RoadmapPanel leave free, clamped to [7, 17].
  * Offsets are world-oriented, relative to the island's world centre.
  */
 export function focusPose(layout: IslandLayout, options: FocusPoseOptions): FocusPose {
@@ -66,8 +69,13 @@ export function focusPose(layout: IslandLayout, options: FocusPoseOptions): Focu
   const right = norm([-forward[2], 0, forward[0]])
   const up: V = [right[1] * forward[2] - right[2] * forward[1], right[2] * forward[0] - right[0] * forward[2], right[0] * forward[1] - right[1] * forward[0]]
   const tanHalf = Math.tan((options.fovDeg * Math.PI) / 360)
+  const insetTop = options.insetTopPx ?? 0
+  const insetBottom = options.insetBottomPx ?? 0
   const freeFraction = Math.max(0.2, 1 - options.insetRightPx / Math.max(1, options.viewportPx.width))
-  const aspect = options.aspect * freeFraction
+  const freeHeight = Math.max(0.2, 1 - (insetTop + insetBottom) / Math.max(1, options.viewportPx.height))
+  // Fitting inside the free rectangle is fitting a viewport that much narrower and shorter.
+  const tanHalfY = tanHalf * freeHeight
+  const aspect = (options.aspect * freeFraction) / freeHeight
 
   const bounds: V[] = []
   for (let i = 0; i < 12; i++) {
@@ -79,7 +87,7 @@ export function focusPose(layout: IslandLayout, options: FocusPoseOptions): Focu
     return bounds.every((p) => {
       const v = sub(p, eye)
       const depth = dot(v, forward)
-      return depth > 0 && Math.abs(dot(v, right) / (depth * tanHalf * aspect)) <= NDC_LIMIT && Math.abs(dot(v, up) / (depth * tanHalf)) <= NDC_LIMIT
+      return depth > 0 && Math.abs(dot(v, right) / (depth * tanHalfY * aspect)) <= NDC_LIMIT && Math.abs(dot(v, up) / (depth * tanHalfY)) <= NDC_LIMIT
     })
   }
   let distance = DISTANCE_MAX
@@ -95,10 +103,15 @@ export function focusPose(layout: IslandLayout, options: FocusPoseOptions): Focu
     distance = hi
   }
 
-  // Pan along the camera's own screen-right so the island centres in the area left of the panel, at any orbit angle.
+  // Pan along the camera's own screen-right and screen-up so the island centres in the free area, at any orbit angle.
   const worldPerPx = (2 * distance * tanHalf) / Math.max(1, options.viewportPx.height)
   const shift = (options.insetRightPx / 2) * worldPerPx
-  const lookAt: Vec3 = [baseLookAt[0] + right[0] * shift, baseLookAt[1], baseLookAt[2] + right[2] * shift]
+  const lift = ((insetBottom - insetTop) / 2) * worldPerPx
+  const lookAt: Vec3 = [
+    baseLookAt[0] + right[0] * shift - up[0] * lift,
+    baseLookAt[1] - up[1] * lift,
+    baseLookAt[2] + right[2] * shift - up[2] * lift,
+  ]
   const position: Vec3 = [lookAt[0] + dir[0] * distance, lookAt[1] + dir[1] * distance, lookAt[2] + dir[2] * distance]
   return { position, lookAt, distance, elevation, azimuth }
 }

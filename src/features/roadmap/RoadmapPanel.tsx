@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   nextStepToMark,
   useAddProgressEntry,
@@ -9,6 +9,22 @@ import {
 } from './api'
 import type { Goal } from '../archipelago/api'
 import { formatEntryDate, formatValue, goalProgress } from '../../lib/goalProgress'
+import { setSheetInset } from './sheetInset'
+
+const COMPACT_QUERY = '(max-width: 639px)'
+
+/** Phone widths: the panel becomes a bottom sheet that starts collapsed. */
+function useCompactLayout(): boolean {
+  const [compact, setCompact] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.(COMPACT_QUERY).matches)
+  useEffect(() => {
+    const query = window.matchMedia?.(COMPACT_QUERY)
+    if (!query) return
+    const onChange = () => setCompact(query.matches)
+    query.addEventListener('change', onChange)
+    return () => query.removeEventListener('change', onChange)
+  }, [])
+  return compact
+}
 
 interface RoadmapPanelProps {
   goal: Goal
@@ -40,9 +56,31 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
   const [celebrating, setCelebrating] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
+  // On a phone the sheet reports its collapsed height, so the camera frames the island above it. Expanding it
+  // for details doesn't reframe: the island stays put under the taller sheet until it collapses again.
+  const compact = useCompactLayout()
+  const [expanded, setExpanded] = useState(false)
+  const expandedRef = useRef(expanded)
+  expandedRef.current = expanded
+  const [sheet, setSheet] = useState<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!compact || !sheet) return
+    const report = () => {
+      if (!expandedRef.current) setSheetInset(sheet.getBoundingClientRect().height)
+    }
+    const observer = new ResizeObserver(report)
+    observer.observe(sheet)
+    report()
+    return () => {
+      observer.disconnect()
+      setSheetInset(0)
+    }
+  }, [compact, sheet])
+  const showDetails = !compact || expanded
+
   if (milestonesError || entriesError) {
     return (
-      <div className="pointer-events-auto absolute bottom-4 right-4 w-72 rounded-md border border-stone-light bg-stone/90 p-3 text-sm text-mist backdrop-blur-sm">
+      <div className="pointer-events-auto absolute inset-x-0 bottom-0 border-t border-stone-light bg-stone/95 p-4 text-sm text-mist backdrop-blur-sm sm:inset-x-auto sm:bottom-4 sm:right-4 sm:w-72 sm:rounded-md sm:border sm:p-3">
         <p className="font-display text-base">{goal.title}</p>
         <p className="mt-1 font-body text-xs text-mist/60">Couldn't load this goal's roadmap. Try refreshing.</p>
       </div>
@@ -105,16 +143,47 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
         : 'Complete'
 
   return (
-    <div className="pointer-events-auto absolute bottom-4 right-4 flex w-72 flex-col gap-2 font-body">
+    <div
+      ref={setSheet}
+      className={
+        compact
+          ? 'pointer-events-auto absolute inset-x-0 bottom-0 flex max-h-[75vh] flex-col overflow-y-auto font-body'
+          : 'pointer-events-auto absolute bottom-4 right-4 flex w-72 flex-col gap-2 font-body'
+      }
+    >
       {celebrating ? (
-        <div className="rounded-md border border-lantern bg-lantern/20 p-3 text-center text-sm font-medium text-lantern">
+        <div className={`rounded-md border border-lantern bg-lantern/20 p-3 text-center text-sm font-medium text-lantern ${compact ? 'mx-4 mb-2' : ''}`}>
           🎉 {goal.title} complete!
         </div>
       ) : null}
 
-      <div className="rounded-md border border-stone-light bg-stone/90 p-3 text-sm text-mist backdrop-blur-sm">
-        <p className="font-display text-base">{goal.title}</p>
-        {goal.description ? <p className="mt-0.5 text-xs text-mist/60">{goal.description}</p> : null}
+      <div
+        className={
+          compact
+            ? `rounded-t-2xl border-t border-stone-light bg-stone/95 px-4 pt-1 text-sm text-mist shadow-[0_-8px_24px_rgba(0,0,0,0.25)] backdrop-blur-sm ${expanded ? 'pb-3' : 'pb-[max(1rem,env(safe-area-inset-bottom))]'}`
+            : 'rounded-md border border-stone-light bg-stone/90 p-3 text-sm text-mist backdrop-blur-sm'
+        }
+      >
+        {compact ? (
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            aria-expanded={expanded}
+            aria-label={expanded ? 'Show less' : 'Show updates and journey'}
+            className="flex h-6 w-full items-center justify-center"
+          >
+            <span aria-hidden="true" className="h-1 w-10 rounded-full bg-mist/30" />
+          </button>
+        ) : null}
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="font-display text-base">{goal.title}</p>
+          {compact ? (
+            <button type="button" onClick={() => setExpanded((value) => !value)} aria-hidden="true" tabIndex={-1} className="shrink-0 text-xs text-mist/60">
+              {expanded ? 'Less' : 'More'}
+            </button>
+          ) : null}
+        </div>
+        {showDetails && goal.description ? <p className="mt-0.5 text-xs text-mist/60">{goal.description}</p> : null}
 
         <div
           role="progressbar"
@@ -147,96 +216,108 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
           <p className="mt-2 text-xs font-medium text-lantern">Complete</p>
         )}
 
-        {updateFormOpen ? (
-          <form onSubmit={handleAddUpdate} className="mt-2 flex flex-col gap-1.5">
-            <input
-              value={updateTitle}
-              onChange={(event) => setUpdateTitle(event.target.value)}
-              placeholder="What happened?"
-              className="rounded border border-stone-light bg-ink px-2 py-1 text-xs text-mist"
-            />
-            {goal.kind === 'numeric' ? (
+        {showDetails ? (
+          <>
+          {updateFormOpen ? (
+            <form onSubmit={handleAddUpdate} className="mt-2 flex flex-col gap-1.5">
               <input
-                value={updateValue}
-                onChange={(event) => setUpdateValue(event.target.value)}
-                placeholder={`Value (${goal.unit ?? 'optional'})`}
-                type="number"
-                step="any"
+                value={updateTitle}
+                onChange={(event) => setUpdateTitle(event.target.value)}
+                placeholder="What happened?"
                 className="rounded border border-stone-light bg-ink px-2 py-1 text-xs text-mist"
               />
-            ) : null}
-            <textarea
-              value={updateNote}
-              onChange={(event) => setUpdateNote(event.target.value)}
-              placeholder="Note (optional)"
-              className="rounded border border-stone-light bg-ink px-2 py-1 text-xs text-mist"
-              rows={2}
-            />
-            <label className="flex items-center gap-1.5 text-xs text-mist/60">
-              Date
-              <input
-                value={updateDate}
-                onChange={(event) => setUpdateDate(event.target.value)}
-                type="date"
-                className="flex-1 rounded border border-stone-light bg-ink px-2 py-1 text-xs text-mist"
+              {goal.kind === 'numeric' ? (
+                <input
+                  value={updateValue}
+                  onChange={(event) => setUpdateValue(event.target.value)}
+                  placeholder={`Value (${goal.unit ?? 'optional'})`}
+                  type="number"
+                  step="any"
+                  className="rounded border border-stone-light bg-ink px-2 py-1 text-xs text-mist"
+                />
+              ) : null}
+              <textarea
+                value={updateNote}
+                onChange={(event) => setUpdateNote(event.target.value)}
+                placeholder="Note (optional)"
+                className="rounded border border-stone-light bg-ink px-2 py-1 text-xs text-mist"
+                rows={2}
               />
-            </label>
-            <div className="flex gap-1.5">
-              <button
-                type="submit"
-                disabled={addProgressEntry.isPending || !updateTitle.trim()}
-                className="flex-1 rounded-md bg-mist px-3 py-1.5 text-xs font-medium text-ink disabled:opacity-50"
-              >
-                Save update
-              </button>
-              <button
-                type="button"
-                onClick={() => setUpdateFormOpen(false)}
-                className="rounded-md border border-stone-light px-3 py-1.5 text-xs text-mist"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setUpdateFormOpen(true)}
-            className="mt-1.5 w-full rounded-md border border-stone-light px-3 py-1.5 text-xs text-mist"
-          >
-            Add update
-          </button>
-        )}
+              <label className="flex items-center gap-1.5 text-xs text-mist/60">
+                Date
+                <input
+                  value={updateDate}
+                  onChange={(event) => setUpdateDate(event.target.value)}
+                  type="date"
+                  className="flex-1 rounded border border-stone-light bg-ink px-2 py-1 text-xs text-mist"
+                />
+              </label>
+              <div className="flex gap-1.5">
+                <button
+                  type="submit"
+                  disabled={addProgressEntry.isPending || !updateTitle.trim()}
+                  className="flex-1 rounded-md bg-mist px-3 py-1.5 text-xs font-medium text-ink disabled:opacity-50"
+                >
+                  Save update
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUpdateFormOpen(false)}
+                  className="rounded-md border border-stone-light px-3 py-1.5 text-xs text-mist"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setUpdateFormOpen(true)}
+              className="mt-1.5 w-full rounded-md border border-stone-light px-3 py-1.5 text-xs text-mist"
+            >
+              Add update
+            </button>
+          )}
+          </>
+        ) : null}
 
         {errorMessage ? <p className="mt-1.5 text-xs text-accent-error">{errorMessage}</p> : null}
       </div>
 
-      <div className="rounded-md border border-stone-light bg-stone/90 text-sm text-mist backdrop-blur-sm">
-        <button
-          type="button"
-          onClick={() => setJourneyOpen((value) => !value)}
-          className="w-full px-3 py-2 text-left text-xs font-medium"
+      {showDetails ? (
+        <div
+          className={
+            compact
+              ? 'border-t border-stone-light bg-stone/95 px-1 pb-[env(safe-area-inset-bottom)] text-sm text-mist backdrop-blur-sm'
+              : 'rounded-md border border-stone-light bg-stone/90 text-sm text-mist backdrop-blur-sm'
+          }
         >
-          {journeyOpen ? 'Hide journey' : 'Show journey'} ({entries.length})
-        </button>
-        {journeyOpen ? (
-          <ul className="max-h-48 overflow-y-auto border-t border-stone-light px-3 py-2 text-xs">
-            {journey.length === 0 ? <li className="py-1.5 text-mist/60">Nothing logged yet. Mark a milestone or add an update.</li> : null}
-            {journey.map((entry) => (
-              <li key={entry.id} className="border-b border-stone-light/60 py-1.5 last:border-0">
-                <p className="font-display text-sm">{entry.title}</p>
-                <p className="text-mist/60">
-                  {entry.kind === 'milestone' ? <span className="text-lantern/90">Milestone · </span> : null}
-                  {formatEntryDate(entry.occurredAt)}
-                  {/* a milestone's title already names its value */}
-                  {entry.kind === 'update' && entry.value !== null ? ` · ${formatValue(entry.value, goal.unit)}` : ''}
-                </p>
-                {entry.note ? <p className="mt-0.5 text-mist/40">{entry.note}</p> : null}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
+          <button
+            type="button"
+            onClick={() => setJourneyOpen((value) => !value)}
+            className="w-full px-3 py-2 text-left text-xs font-medium"
+          >
+            {journeyOpen ? 'Hide journey' : 'Show journey'} ({entries.length})
+          </button>
+          {journeyOpen ? (
+            <ul className="max-h-48 overflow-y-auto border-t border-stone-light px-3 py-2 text-xs">
+              {journey.length === 0 ? <li className="py-1.5 text-mist/60">Nothing logged yet. Mark a milestone or add an update.</li> : null}
+              {journey.map((entry) => (
+                <li key={entry.id} className="border-b border-stone-light/60 py-1.5 last:border-0">
+                  <p className="font-display text-sm">{entry.title}</p>
+                  <p className="text-mist/60">
+                    {entry.kind === 'milestone' ? <span className="text-lantern/90">Milestone · </span> : null}
+                    {formatEntryDate(entry.occurredAt)}
+                    {/* a milestone's title already names its value */}
+                    {entry.kind === 'update' && entry.value !== null ? ` · ${formatValue(entry.value, goal.unit)}` : ''}
+                  </p>
+                  {entry.note ? <p className="mt-0.5 text-mist/40">{entry.note}</p> : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }
