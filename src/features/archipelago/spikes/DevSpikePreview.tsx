@@ -40,7 +40,7 @@ export function DevSpikePreview() {
         <directionalLight position={[6, 12, 4]} intensity={1.4} />
         <Suspense fallback={null}>
           <Spike seed={seed} />
-          <Water />
+          <Water extent={12} islands={[]} />
         </Suspense>
         <OrbitControls target={view.target} />
       </Canvas>

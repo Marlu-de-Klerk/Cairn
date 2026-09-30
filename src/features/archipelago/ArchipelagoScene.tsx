@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { useMatch, useNavigate } from 'react-router'
 import { useGoals } from './api'
@@ -41,19 +41,27 @@ export function ArchipelagoScene({ showCompleted }: ArchipelagoSceneProps) {
   // otherwise a fixed default azimuth has no relationship to where the
   // golden-angle spiral actually placed them (see CameraRig's own comment).
   const initialAzimuth = visibleGoals.length > 0 ? Math.atan2(visibleGoals[0].islandZ, visibleGoals[0].islandX) : undefined
+  // Island centres for the sea (ripples keep clear of their halos) and the ocean life around them. Keyed on the
+  // positions themselves, not the goal objects, so a refetch doesn't rebuild the environment.
+  const islandKey = visibleGoals.map((goal) => `${goal.islandX},${goal.islandZ}`).join(';')
+  const islands = useMemo(
+    () => (islandKey ? islandKey.split(';').map((xz) => xz.split(',').map(Number) as [number, number]) : []),
+    [islandKey],
+  )
 
   return (
     <div className="fixed inset-0 -z-10">
-      {/* A focused island redraws only on demand: every animator there (camera flight, orbit drag, trail springs,
-          cairn pulse, hover lift) calls invalidate(). The overview's auto-rotate still animates every frame.
-          touch-action: none keeps a one-finger orbit drag from scrolling the page. */}
+      {/* A focused island redraws only on demand: every animator there (camera flight, orbit drag, zoom, trail
+          springs, cairn pulse, hover lift) calls invalidate(), so the sea and ocean life hold still there. The
+          overview animates every frame. touch-action: none keeps a one-finger orbit drag or a pinch from scrolling
+          or zooming the page. */}
       <Canvas
         camera={{ fov: 50 }}
         flat
         frameloop={focusedGoal ? 'demand' : 'always'}
         style={{ touchAction: 'none' }}
       >
-        <SceneEnvironment />
+        <SceneEnvironment islands={islands} />
         <HullRegistryProvider>
         {visibleGoals.map((goal) => (
           <Island
@@ -69,7 +77,7 @@ export function ArchipelagoScene({ showCompleted }: ArchipelagoSceneProps) {
           </group>
         ) : null}
         </HullRegistryProvider>
-        <CameraRig focusedGoal={focusedGoal} initialAzimuth={initialAzimuth} />
+        <CameraRig focusedGoal={focusedGoal} initialAzimuth={initialAzimuth} onExitFocus={() => navigate('/')} />
       </Canvas>
     </div>
   )
