@@ -1,9 +1,7 @@
 @import "tailwindcss";
-@import "@fontsource-variable/fraunces";
-@import "@fontsource/inter/400.css";
-@import "@fontsource/inter/500.css";
-@import "@fontsource/inter/600.css";
-@import "@fontsource/inter/700.css";
+/* Rounded, friendly type: Fredoka for display (wordmark, titles), Nunito for everything else. Both variable, OFL. */
+@import "@fontsource-variable/fredoka";
+@import "@fontsource-variable/nunito";
 
 @theme {
   --color-ink: #12181f;
@@ -17,14 +15,67 @@
      base palette, so this isn't a new, undocumented seventh hex. */
   --color-accent-error: #e2483f;
 
-  --font-display: "Fraunces Variable", Georgia, serif;
-  --font-body: "Inter", system-ui, sans-serif;
+  --font-display: "Fredoka Variable", "Nunito Variable", ui-rounded, system-ui, sans-serif;
+  --font-body: "Nunito Variable", ui-rounded, system-ui, sans-serif;
+
+  /* Motion: soft, springy entrances. Used as animate-rise / animate-pop / animate-float / animate-fade.
+     Fill mode `backwards`, never `both`: an entrance ends on the element's own state, and a transform animation held
+     after it ends would make the element the containing block for fixed-position children (the biome picker's
+     full-window canvas inside the new-goal dialog). */
+  --ease-spring: cubic-bezier(0.22, 1.2, 0.36, 1);
+  --animate-rise: rise 320ms var(--ease-spring) backwards;
+  --animate-pop: pop 260ms var(--ease-spring) backwards;
+  --animate-fade: fade 220ms ease-out backwards;
+  --animate-float: float 5s ease-in-out infinite;
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(12px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes pop {
+    from { opacity: 0; transform: scale(0.9); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0) rotate(-1deg); }
+    50% { transform: translateY(-10px) rotate(1deg); }
+  }
 }
 
 body {
   background: var(--color-ink);
   color: var(--color-mist);
   font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Every button eases its colours and gives a small, springy press. */
+button {
+  transition:
+    transform 160ms var(--ease-spring),
+    background-color 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease,
+    opacity 200ms ease;
+}
+button:not(:disabled):active {
+  transform: scale(0.96);
+}
+
+/* Spec §7: prefers-reduced-motion is respected throughout. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Visible keyboard focus everywhere — spec §7 quality floor. Tailwind's

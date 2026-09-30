@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { View } from '@react-three/drei'
+import { PerspectiveCamera, View } from '@react-three/drei'
 import type { Group } from 'three'
 import type { Goal } from './api'
 import { BIOME_TERRAIN } from '../../lib/island/biomes'
@@ -8,6 +8,7 @@ import { useIslandBuild } from './terrain/islandCache'
 import { TerracedIsland } from './TerracedIsland'
 import { HullRegistryProvider } from './hullRegistry'
 import { islandLayoutSeed } from '../../lib/island/fixedIslands'
+import { noPointerEvents } from './noPointerEvents'
 
 const BIOMES: { key: Goal['biome']; label: string }[] = [
   { key: 'jungle', label: 'Jungle' },
@@ -43,23 +44,35 @@ export function BiomePicker({ value, onChange }: BiomePickerProps) {
                 frame — no `track` prop needed, each card gets independent
                 clipping for free. */}
             <View className="h-full w-full">
+              {/* Each View renders at its card's size, so a camera of its own keeps the card's aspect. */}
+              <PerspectiveCamera makeDefault position={[0, 2.4, 3.6]} rotation={[-0.53, 0, 0]} fov={40} />
               <hemisphereLight args={['#EAF6F6', '#6BC2C9', 0.7]} />
               <directionalLight position={[-4, 16, 11]} intensity={1.15} />
               <RotatingIsland biome={key} />
             </View>
-            <span className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 rounded bg-ink/70 px-2 py-0.5 font-body text-xs text-mist">
+            <span className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 rounded-xl bg-ink/70 px-2 py-0.5 font-body text-xs text-mist">
               {label}
             </span>
           </button>
         )
       })}
       {/* One shared Canvas backs every <View> above — spec §6.2's "one shared
-          <Canvas>, not six canvases." Each <View> reads its own tracked
-          button's DOM rect and viewport-clips this shared canvas per frame,
-          so it can be a simple full-parent-fill absolutely-positioned
-          element behind the grid. It renders no interactive 3D content (each
-          card's own <button> handles clicks), so it needs no eventSource. */}
-      <Canvas className="pointer-events-none absolute inset-0 -z-10" gl={{ antialias: true }}>
+          <Canvas>, not six canvases." Each <View> scissors this canvas to its
+          own card's rect every frame. drei's View decides a card is offscreen
+          by comparing its viewport rect with the canvas's width and height,
+          so the canvas must span the viewport from its top-left: fixed and
+          full-window (the dialog is fixed too, and scrolls its own content,
+          so the cards' rects stay current), transparent everywhere no card
+          draws. Placement goes in `style`: <Canvas> sets an inline position
+          and pointer-events on its wrapper that would beat classes. It
+          renders no interactive 3D content (each card's own <button> handles
+          clicks), so it takes no pointer events at all. */}
+      <Canvas
+        style={{ position: 'fixed', inset: 0, zIndex: -10, pointerEvents: 'none' }}
+        dpr={[1, 1.5]}
+        events={noPointerEvents}
+        gl={{ antialias: true }}
+      >
         <View.Port />
       </Canvas>
     </div>

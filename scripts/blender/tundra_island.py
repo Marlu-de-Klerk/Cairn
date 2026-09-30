@@ -176,9 +176,11 @@ def log_cabin(sink, unlit, M, r):
         unlit.face(M, [(x - 0.025, -W / 2 - rad - 0.002, 0.05), (x + 0.025, -W / 2 - rad - 0.002, 0.05), (x + 0.025, -W / 2 - rad - 0.002, 0.095), (x - 0.025, -W / 2 - rad - 0.002, 0.095)][::-1], glow)
     cx = L / 2 - 0.06  # chimney
     box(sink, M, (cx - 0.025, 0.02, 0.0), (cx + 0.025, 0.07, H + R + 0.06), snow_colour(0, 0, 0.5), col('#8E959A'))
-    for k in range(4):  # smoke rising and drifting
-        s = 0.018 + 0.01 * k
-        sink.blob(M, (cx + 0.02 * k, 0.045 + 0.015 * k, H + R + 0.1 + 0.07 * k), s, col('#F4F6F8'), col('#E3E8EC'), col('#CBD3DA'), subdiv=1, squash=0.8, jitter=0.1, seed=k, smooth=True)
+    base = (M @ Vector((0, 0, H + R + 0.06))).z
+    with flowing(FLOW_SMOKE, lambda co: (co.z - base) * 6):  # smoke rising and drifting; sways more higher up
+        for k in range(4):
+            s = 0.018 + 0.01 * k
+            sink.blob(M, (cx + 0.02 * k, 0.045 + 0.015 * k, H + R + 0.1 + 0.07 * k), s, col('#F4F6F8'), col('#E3E8EC'), col('#CBD3DA'), subdiv=1, squash=0.8, jitter=0.1, seed=k, smooth=True)
     for k in range(3):  # woodpile by the wall
         for j in range(3 - k):
             sink.cyl(M, [(-L / 2 - 0.05 + j * 0.022 + k * 0.011, -W / 2 + 0.02, 0.012 + k * 0.02), (-L / 2 - 0.05 + j * 0.022 + k * 0.011, W / 2 - 0.03, 0.012 + k * 0.02)], [0.011, 0.011], 5, [col(SNOW['log'])], cap_top=col(SNOW['logEnd']))

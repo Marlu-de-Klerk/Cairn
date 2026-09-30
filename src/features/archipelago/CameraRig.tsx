@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Vector3 } from 'three'
 import type { PerspectiveCamera } from 'three'
@@ -8,31 +8,35 @@ import { hashGoalId } from '../../lib/theme'
 import { islandLayoutSeed } from '../../lib/island/fixedIslands'
 import { getIslandLayout } from './terrain/islandCache'
 import { OVERVIEW_ZOOM, clampZoom, easeZoom, stepFocusZoom, wheelFactor } from '../../lib/cameraZoom'
+import { overviewFrame } from '../../lib/overviewFrame'
+import { getSheetInset, subscribeSheetInset } from '../roadmap/sheetInset'
 
-const ORBIT_RADIUS = 30
-const ORBIT_ELEVATION = (35 * Math.PI) / 180 // spec §6.1: "looking down at maybe 35°"
 const ORBIT_SPEED = 0.05 // radians/second while idle
 const DRAG_SENSITIVITY = 0.005 // radians per pixel of horizontal drag
 const FLY_DURATION = 1.2 // seconds, spec §6.3
 const DRAG_CLICK_THRESHOLD = 5 // px of travel past which a gesture is a drag, not a click
 const PANEL_WIDTH_PX = 288 // RoadmapPanel's w-72
 const PANEL_MIN_VIEWPORT_PX = 640
+const FOCUS_INSET_TOP_PX = 72 // the header
+const OVERVIEW_INSET_TOP_PX = 100 // the header, plus room for the labels above the farthest islands
+const FRAME_EASE = 3 // per second: how fast the overview reframes when an island is added or the window resizes
 
 function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3)
 }
 
-function orbitPosition(azimuth: number, zoom: number): Vector3 {
-  const radius = ORBIT_RADIUS * zoom
+function orbitPosition(center: Vector3, azimuth: number, elevation: number, radius: number): Vector3 {
   return new Vector3(
-    radius * Math.cos(ORBIT_ELEVATION) * Math.cos(azimuth),
-    radius * Math.sin(ORBIT_ELEVATION),
-    radius * Math.cos(ORBIT_ELEVATION) * Math.sin(azimuth),
+    center.x + radius * Math.cos(elevation) * Math.cos(azimuth),
+    radius * Math.sin(elevation),
+    center.z + radius * Math.cos(elevation) * Math.sin(azimuth),
   )
 }
 
 interface CameraRigProps {
   focusedGoal: Goal | null
+  /** Island centres (world x, z): the overview orbits their middle, pulled back until every one is on screen. */
+  islands?: readonly (readonly [number, number])[]
   // The angle (radians, atan2(islandZ, islandX)) toward the user's own
   // archipelago, so the idle orbit starts facing their islands instead of a
   // fixed world-space 0 that has no relationship to where a golden-angle
@@ -48,8 +52,22 @@ interface CameraRigProps {
   onExitFocus?: () => void
 }
 
-export function CameraRig({ focusedGoal, initialAzimuth, seedOverride, devOrbit, onExitFocus }: CameraRigProps) {
+const NO_ISLANDS: readonly (readonly [number, number])[] = []
+
+export function CameraRig({ focusedGoal, islands = NO_ISLANDS, initialAzimuth, seedOverride, devOrbit, onExitFocus }: CameraRigProps) {
   const { camera, gl, size, invalidate } = useThree()
+  const fov = (camera as PerspectiveCamera).fov
+  const frame = useMemo(
+    () => overviewFrame(islands, { fovDeg: fov, viewportPx: { width: size.width, height: size.height }, insetTopPx: OVERVIEW_INSET_TOP_PX }),
+    [islands, fov, size.width, size.height],
+  )
+  // The frame the overview is showing, easing toward `frame` so a new island or a resize reframes smoothly.
+  const frameCenter = useRef<Vector3 | null>(null)
+  const frameDistance = useRef(0)
+  const frameElevation = useRef(0)
+  // The phone roadmap sheet's height, eased so the island glides up when the sheet appears.
+  const sheetInset = useRef(getSheetInset())
+  useEffect(() => subscribeSheetInset(invalidate), [invalidate])
   const azimuth = useRef(0)
   // Spec §5.6.1: the focus orbit is separate from the overview azimuth, so orbiting an island never moves where the
   // overview returns to.
@@ -233,6 +251,24 @@ export function CameraRig({ focusedGoal, initialAzimuth, seedOverride, devOrbit,
     focusZoom.current = easeZoom(focusZoom.current, focusZoomTarget.current, delta)
     if (Math.abs(focusZoom.current - focusZoomTarget.current) > 1e-4 || Math.abs(overviewZoom.current - overviewZoomTarget.current) > 1e-4) invalidate()
 
+    const target = new Vector3(frame.center[0], 0, frame.center[1])
+    if (!frameCenter.current) {
+      frameCenter.current = target
+      frameDistance.current = frame.distance
+      frameElevation.current = frame.elevation
+    } else {
+      const k = 1 - Math.exp(-delta * FRAME_EASE)
+      frameCenter.current.lerp(target, k)
+      frameDistance.current += (frame.distance - frameDistance.current) * k
+      frameElevation.current += (frame.elevation - frameElevation.current) * k
+      if (frameCenter.current.distanceTo(target) > 1e-3 || Math.abs(frame.distance - frameDistance.current) > 1e-3) invalidate()
+    }
+
+    const sheetTarget = getSheetInset()
+    sheetInset.current += (sheetTarget - sheetInset.current) * (1 - Math.exp(-delta * 8))
+    if (Math.abs(sheetTarget - sheetInset.current) > 0.5) invalidate()
+    else sheetInset.current = sheetTarget
+
     const isTransitioning = transitionStart.current !== null
     orbitEnabled.current = focusedGoal !== null && !isTransitioning && devOrbit === undefined
 
@@ -250,6 +286,8 @@ export function CameraRig({ focusedGoal, initialAzimuth, seedOverride, devOrbit,
         aspect: size.width / Math.max(1, size.height),
         fovDeg: (camera as PerspectiveCamera).fov,
         insetRightPx: size.width >= PANEL_MIN_VIEWPORT_PX ? PANEL_WIDTH_PX : 0,
+        insetTopPx: FOCUS_INSET_TOP_PX,
+        insetBottomPx: sheetInset.current,
         viewportPx: size,
         orbit: devOrbit ?? orbit.current,
       })
@@ -259,8 +297,8 @@ export function CameraRig({ focusedGoal, initialAzimuth, seedOverride, devOrbit,
       const offset = new Vector3(...pose.position).sub(new Vector3(...pose.lookAt)).multiplyScalar(focusZoom.current)
       desiredPosition = desiredLookAt.clone().add(offset)
     } else {
-      desiredPosition = orbitPosition(azimuth.current, overviewZoom.current)
-      desiredLookAt = new Vector3(0, 0, 0)
+      desiredPosition = orbitPosition(frameCenter.current, azimuth.current, frameElevation.current, frameDistance.current * overviewZoom.current)
+      desiredLookAt = frameCenter.current.clone()
     }
 
     if (isTransitioning) {

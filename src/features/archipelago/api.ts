@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { islandPosition } from '../../lib/archipelago'
+import { islandPosition, nextIslandIndex } from '../../lib/archipelago'
 import type { Database } from '../../lib/database.types'
 import type { MilestoneInput } from '../../lib/newGoalValidation'
 import { supabase } from '../../lib/supabase'
@@ -137,10 +137,9 @@ export function useCreateGoal() {
     mutationFn: async (input: CreateGoalInput): Promise<Goal> => {
       if (!session) throw new Error('Not signed in.')
 
-      // Existing goal count determines this goal's spiral index — see
-      // src/lib/archipelago.ts. Read via the already-cached goals query
-      // rather than a fresh count query, so this never races a concurrent
-      // read differently than what the user is currently looking at.
+      // The first spiral spot no current island occupies — see nextIslandIndex in src/lib/archipelago.ts. Read via
+      // the already-cached goals query rather than a fresh query, so this never races a concurrent read differently
+      // than what the user is currently looking at.
       const existingGoals = queryClient.getQueryData<Goal[]>(['goals', session.user.id]) ?? []
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
@@ -149,7 +148,8 @@ export function useCreateGoal() {
         .single()
       if (profileError) throw profileError
 
-      const position = islandPosition(existingGoals.length, profile.archipelago_seed)
+      const index = nextIslandIndex(existingGoals.map((g) => ({ x: g.islandX, z: g.islandZ })), profile.archipelago_seed)
+      const position = islandPosition(index, profile.archipelago_seed)
 
       // The generated RPC Args type has no way to express Postgres function
       // parameter nullability (pg_proc carries no NOT NULL for args), so it
@@ -181,8 +181,102 @@ export function useCreateGoal() {
       if (error) throw error
       return toGoal(data)
     },
-    onSuccess: () => {
+    onSuccess: (goal) => {
+      // In the cache before the refetch lands, so navigating straight to the new island finds it.
+      if (session) queryClient.setQueryData<Goal[]>(['goals', session.user.id], (goals) => (goals ? [...goals, goal] : goals))
       queryClient.invalidateQueries({ queryKey: ['goals'] })
     },
+  })
+}
+
+export interface EditMilestoneInput {
+  /** null for a milestone added in the editor */
+  readonly id: string | null
+  readonly title: string
+  readonly targetValue: number | null
+}
+
+export interface UpdateGoalInput {
+  readonly goalId: string
+  readonly title: string
+  readonly description: string | null
+  readonly unit: string | null
+  readonly targetValue: number | null
+  /** in trail order; existing rows keep their sort_order, new ones are appended after the highest */
+  readonly milestones: readonly EditMilestoneInput[]
+  readonly removedMilestoneIds: readonly string[]
+}
+
+/**
+ * Saves the edit-goal sheet: the goal's own fields, then its milestones (removed, renamed or re-valued, added). Only
+ * milestones not yet done can be removed or re-valued, and new ones only go after the existing ones, so the trail's
+ * sort order never has to be rewritten.
+ */
+export function useUpdateGoal() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: UpdateGoalInput) => {
+      const { error: goalError } = await supabase
+        .from('goals')
+        .update({ title: input.title, description: input.description, unit: input.unit, target_value: input.targetValue })
+        .eq('id', input.goalId)
+      if (goalError) throw goalError
+
+      if (input.removedMilestoneIds.length > 0) {
+        const { error } = await supabase.from('milestones').delete().in('id', [...input.removedMilestoneIds])
+        if (error) throw error
+      }
+
+      const { data: existing, error: readError } = await supabase.from('milestones').select('sort_order').eq('goal_id', input.goalId)
+      if (readError) throw readError
+      let nextSortOrder = Math.max(-1, ...existing.map((m) => m.sort_order)) + 1
+
+      for (const milestone of input.milestones) {
+        if (milestone.id) {
+          const { error } = await supabase
+            .from('milestones')
+            .update({ title: milestone.title, target_value: milestone.targetValue })
+            .eq('id', milestone.id)
+          if (error) throw error
+        } else {
+          const { error } = await supabase
+            .from('milestones')
+            .insert({ goal_id: input.goalId, title: milestone.title, target_value: milestone.targetValue, sort_order: nextSortOrder++ })
+          if (error) throw error
+        }
+      }
+    },
+    onSuccess: (_, input) => {
+      queryClient.invalidateQueries({ queryKey: ['goals'] })
+      queryClient.invalidateQueries({ queryKey: ['milestones', input.goalId] })
+    },
+  })
+}
+
+/**
+ * Deleting a goal archives it: status 'archived' hides it (and its island) everywhere, but keeps its journey, so the
+ * delete can be undone. Resolves to the status it had, for useRestoreGoal.
+ */
+export function useArchiveGoal() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (goal: Goal): Promise<Goal['status']> => {
+      const { error } = await supabase.from('goals').update({ status: 'archived' }).eq('id', goal.id)
+      if (error) throw error
+      return goal.status
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['goals'] }),
+  })
+}
+
+/** Undoes useArchiveGoal: puts the goal back as it was (active or completed). */
+export function useRestoreGoal() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ goalId, status }: { goalId: string; status: Goal['status'] }) => {
+      const { error } = await supabase.from('goals').update({ status }).eq('id', goalId)
+      if (error) throw error
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['goals'] }),
   })
 }

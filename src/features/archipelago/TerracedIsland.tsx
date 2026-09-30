@@ -6,13 +6,14 @@ import type { PropKind } from '../../lib/island/types'
 import { propRule } from '../../lib/island/biomes'
 import type { IslandBuild } from './terrain/islandCache'
 import type { LitMaterialKind } from './terrain/materials'
-import { getPropMaterial, getTerrainLitMaterial, terrainUnlitMaterial } from './terrain/materials'
+import { flowSoftMaterial, flowUnlitMaterial, getPropMaterial, getTerrainLitMaterial, terrainUnlitMaterial } from './terrain/materials'
 import { getPropGeometry } from './terrain/propGeometry'
 import { PropPart } from './models/PropPart'
 import type { PropPlacement as PartPlacement } from './models/scatter'
 import { useHullRegistry } from './hullRegistry'
 import { HandBuiltIsland } from './models/HandBuiltIsland'
 import { HAND_BUILT } from '../../lib/island/fixedIslands'
+import { ShoreWaves } from './ShoreWaves'
 
 export interface TerracedIslandProps {
   readonly build: IslandBuild
@@ -51,13 +52,14 @@ export function TerracedIsland({ build, materialKind = 'toon', onClick, onPointe
   return (
     <group>
       {handBuilt ? (
-        <HandBuiltIsland url={handBuilt.url} litMaterial={getTerrainLitMaterial(materialKind)} softMaterial={getTerrainLitMaterial('lambert')} unlitMaterial={terrainUnlitMaterial} />
+        <HandBuiltIsland url={handBuilt.url} litMaterial={getTerrainLitMaterial(materialKind)} softMaterial={flowSoftMaterial} unlitMaterial={flowUnlitMaterial} />
       ) : (
         <>
           <mesh geometry={build.lit} material={getTerrainLitMaterial(materialKind)} raycast={() => null} />
           <mesh geometry={build.unlit} material={terrainUnlitMaterial} raycast={() => null} />
         </>
       )}
+      <ShoreWaves layout={build.layout} />
       <mesh ref={hullRef} geometry={build.hull} material={hullMaterial} onClick={onClick} onPointerOver={onPointerOver} onPointerOut={onPointerOut} />
       {handBuilt ? null : groups.map(([kind, placements]) => (
         <PropPart key={kind} geometry={getPropGeometry(kind, build.layout.biome)} material={getPropMaterial(materialKind)} placements={placements} />

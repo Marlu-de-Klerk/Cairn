@@ -6,6 +6,7 @@ import { ISLAND_YAW } from '../../lib/island/orientation'
 import { getIslandLayout } from './terrain/islandCache'
 import type { Goal } from './api'
 import { islandLayoutSeed } from '../../lib/island/fixedIslands'
+import { noPointerEvents } from './noPointerEvents'
 
 const MAX_MILESTONES = 8
 
@@ -13,6 +14,10 @@ const MAX_MILESTONES = 8
 export interface MilestoneRow {
   title: string
   targetValue: string // raw input text; parsed by the caller for validation
+  /** editing an existing goal: the milestone's row id, null for one added in the editor */
+  id?: string | null
+  /** a milestone already done: it can be renamed, but its value is fixed and it can't be removed */
+  locked?: boolean
 }
 
 interface MilestoneBuilderProps {
@@ -20,15 +25,17 @@ interface MilestoneBuilderProps {
   milestones: MilestoneRow[]
   errors: Record<number, string>
   onChange: (milestones: MilestoneRow[]) => void
+  /** the live trail preview (new goals only) */
+  showPreview?: boolean
 }
 
-export function MilestoneBuilder({ kind, milestones, errors, onChange }: MilestoneBuilderProps) {
+export function MilestoneBuilder({ kind, milestones, errors, onChange, showPreview = true }: MilestoneBuilderProps) {
   function updateRow(index: number, patch: Partial<MilestoneRow>) {
     onChange(milestones.map((row, i) => (i === index ? { ...row, ...patch } : row)))
   }
   function addRow() {
     if (milestones.length >= MAX_MILESTONES) return
-    onChange([...milestones, { title: '', targetValue: '' }])
+    onChange([...milestones, { title: '', targetValue: '', id: null }])
   }
   function removeRow(index: number) {
     onChange(milestones.filter((_, i) => i !== index))
@@ -36,7 +43,7 @@ export function MilestoneBuilder({ kind, milestones, errors, onChange }: Milesto
 
   return (
     <div className="space-y-3">
-      <TrailPreview count={milestones.length} />
+      {showPreview ? <TrailPreview count={milestones.length} /> : null}
       <ul className="space-y-2">
         {milestones.map((row, index) => (
           <li key={index} className="flex items-start gap-2">
@@ -45,7 +52,7 @@ export function MilestoneBuilder({ kind, milestones, errors, onChange }: Milesto
                 value={row.title}
                 onChange={(e) => updateRow(index, { title: e.target.value })}
                 placeholder={`Milestone ${index + 1}`}
-                className="w-full rounded-md border border-stone-light bg-ink px-3 py-1.5 font-body text-sm text-mist"
+                className="w-full rounded-xl border border-stone-light bg-ink px-3 py-1.5 font-body text-sm text-mist"
               />
               {kind === 'numeric' ? (
                 <input
@@ -53,14 +60,20 @@ export function MilestoneBuilder({ kind, milestones, errors, onChange }: Milesto
                   onChange={(e) => updateRow(index, { targetValue: e.target.value })}
                   inputMode="decimal"
                   placeholder="Value"
-                  className="mt-1 w-full rounded-md border border-stone-light bg-ink px-3 py-1.5 font-body text-sm text-mist"
+                  readOnly={row.locked}
+                  aria-label={`Milestone ${index + 1} value`}
+                  className="mt-1 w-full rounded-xl border border-stone-light bg-ink px-3 py-1.5 font-body text-sm text-mist read-only:opacity-60"
                 />
               ) : null}
               {errors[index] ? <p className="mt-1 font-body text-xs text-accent-error">{errors[index]}</p> : null}
             </div>
-            <button type="button" onClick={() => removeRow(index)} className="font-body text-xs text-mist/50 hover:text-mist">
-              Remove
-            </button>
+            {row.locked ? (
+              <span className="pt-1.5 font-body text-xs text-lantern/90">Done</span>
+            ) : (
+              <button type="button" onClick={() => removeRow(index)} className="font-body text-xs text-mist/50 hover:text-mist">
+                Remove
+              </button>
+            )}
           </li>
         ))}
       </ul>
@@ -92,8 +105,8 @@ function TrailPreview({ count }: { count: number }) {
   )
 
   return (
-    <div className="h-28 overflow-hidden rounded-md border border-stone-light bg-ink">
-      <Canvas camera={{ position: [5.2, 4.4, 5.2], fov: 40 }} frameloop="demand" flat onCreated={({ camera }) => camera.lookAt(0, 0.9, 0)}>
+    <div className="h-28 overflow-hidden rounded-xl border border-stone-light bg-ink">
+      <Canvas camera={{ position: [5.2, 4.4, 5.2], fov: 40 }} frameloop="demand" flat events={noPointerEvents} onCreated={({ camera }) => camera.lookAt(0, 0.9, 0)}>
         <group rotation={[0, ISLAND_YAW, 0]}>
           <mesh geometry={ribbon}>
             <meshBasicMaterial color={SHARED_PALETTE.trailDone} transparent opacity={0.3} depthWrite={false} />

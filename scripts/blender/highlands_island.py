@@ -256,8 +256,10 @@ def bothy(sink, unlit, M, r):
     box(sink, M, (-L / 2 - 0.005, -0.02, H), (-L / 2 + 0.04, 0.02, H + R + 0.05), col('#8E8F88'), stone_c)  # chimney
     sink.face(M, [(-0.025, -W / 2 - 0.001, 0.0), (0.025, -W / 2 - 0.001, 0.0), (0.025, -W / 2 - 0.001, 0.08), (-0.025, -W / 2 - 0.001, 0.08)][::-1], col('#4E6A5A'))  # door
     unlit.face(M, [(0.06, -W / 2 - 0.002, 0.045), (0.095, -W / 2 - 0.002, 0.045), (0.095, -W / 2 - 0.002, 0.075), (0.06, -W / 2 - 0.002, 0.075)][::-1], col('#FFD98A'))
-    for k in range(3):
-        sink.blob(M, (-L / 2 + 0.02 + 0.02 * k, 0.01 * k, H + R + 0.08 + 0.05 * k), 0.014 + 0.007 * k, col('#F2F4F4'), col('#E0E5E6'), col('#C9D0D2'), subdiv=1, squash=0.8, jitter=0.1, seed=k, smooth=True)
+    base = (M @ Vector((0, 0, H + R + 0.05))).z
+    with flowing(FLOW_SMOKE, lambda co: (co.z - base) * 6):  # chimney smoke, swaying more higher up
+        for k in range(3):
+            sink.blob(M, (-L / 2 + 0.02 + 0.02 * k, 0.01 * k, H + R + 0.08 + 0.05 * k), 0.014 + 0.007 * k, col('#F2F4F4'), col('#E0E5E6'), col('#C9D0D2'), subdiv=1, squash=0.8, jitter=0.1, seed=k, smooth=True)
 
 
 def stone_bridge(sink, M, span, r):

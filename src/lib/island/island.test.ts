@@ -253,6 +253,20 @@ describe('layout invariants (spec §9.1)', () => {
 })
 
 describe('islandAnchors / focusPose', () => {
+  it('frames the island above a bottom sheet and below the header', () => {
+    const l = layoutFor('jungle', 1)
+    const base = { aspect: 390 / 845, fovDeg: 50, insetRightPx: 0, viewportPx: { width: 390, height: 845 }, orbit: 0 }
+    const open = focusPose(l, base)
+    const sheet = focusPose(l, { ...base, insetTopPx: 70, insetBottomPx: 300 })
+    // less room: the camera backs off (or is already at its limit) ...
+    expect(sheet.distance).toBeGreaterThanOrEqual(open.distance)
+    // ... and looks lower, so the island sits higher on screen
+    expect(sheet.lookAt[1]).toBeLessThan(open.lookAt[1])
+    // equal insets top and bottom don't move the look-at
+    const even = focusPose(l, { ...base, insetTopPx: 100, insetBottomPx: 100 })
+    expect(even.lookAt[1]).toBeCloseTo(open.lookAt[1], 6)
+  })
+
   it('keeps the label within a metre of the summit', () => {
     sweep((l) => expect(islandAnchors(l).labelY).toBeLessThanOrEqual(l.summitTopY + 1.0 + 1e-9))
   })
