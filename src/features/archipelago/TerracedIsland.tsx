@@ -13,6 +13,7 @@ import type { PropPlacement as PartPlacement } from './models/scatter'
 import { useHullRegistry } from './hullRegistry'
 import { HandBuiltIsland } from './models/HandBuiltIsland'
 import { HAND_BUILT } from '../../lib/island/fixedIslands'
+import { ShoreWaves } from './ShoreWaves'
 
 export interface TerracedIslandProps {
   readonly build: IslandBuild
@@ -58,6 +59,7 @@ export function TerracedIsland({ build, materialKind = 'toon', onClick, onPointe
           <mesh geometry={build.unlit} material={terrainUnlitMaterial} raycast={() => null} />
         </>
       )}
+      <ShoreWaves layout={build.layout} />
       <mesh ref={hullRef} geometry={build.hull} material={hullMaterial} onClick={onClick} onPointerOver={onPointerOver} onPointerOut={onPointerOut} />
       {handBuilt ? null : groups.map(([kind, placements]) => (
         <PropPart key={kind} geometry={getPropGeometry(kind, build.layout.biome)} material={getPropMaterial(materialKind)} placements={placements} />
