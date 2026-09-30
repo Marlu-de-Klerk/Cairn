@@ -40,16 +40,19 @@ def grass(co):
     return mix(col(PAL['cap']), col(PAL['capLight']) if n > 0 else col(JUNGLE['leafLight']), min(1.0, abs(n) * 1.6))
 
 
+def smooth(t):
+    t = max(0.0, min(1.0, t))
+    return t * t * (3 - 2 * t)
+
+
 def jungle_cliff(level, h, n1, n2, x, y, z):
-    tone = PAL['cliffLit'] if n1 > 0.2 else PAL['cliffShade'] if n1 < -0.2 else PAL['cliff']
-    k = col(tone, 0.92 + 0.12 * (0.5 + 0.5 * n2))
-    if h < 0.14:
-        k = col(PAL['cliffBase'], 0.95 + 0.1 * n2)
-    elif h > 0.955:
-        k = col(JUNGLE['moss'])
-    elif h > 0.88:
-        k = col(PAL['cliffRim'])
-    return k
+    # smooth blends (coloured per corner by colour_terrain), so the wall shades gradually instead of in blocks
+    k = mix(col(PAL['cliffShade']), col(PAL['cliffLit']), smooth(0.5 + 1.2 * n1))
+    k = mix(k, col(PAL['cliff']), 0.4)
+    k = mix(k, col(PAL['cliff'], 0.92 + 0.12 * (0.5 + 0.5 * n2)), 0.3)
+    k = mix(k, col(PAL['cliffBase']), smooth((0.16 - h) / 0.08))
+    k = mix(k, col(PAL['cliffRim']), smooth((h - 0.86) / 0.04))
+    return mix(k, col(JUNGLE['moss']), smooth((h - 0.94) / 0.025))
 
 
 def jungle_lip(x, y, z, n1, n2):
@@ -360,11 +363,12 @@ def main():
     PALM = {'trunk': col(FOL['palmTrunk']), 'ring': col(FOL['palmRing']), 'frond': col(FOL['frond']), 'tip': col(FOL['frondTip']),
             'nut': col(JUNGLE['bark']), 'nutDark': col(JUNGLE['barkDark'])}
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    terrain = build_terrain()
+    terrain = build_terrain(rings=22)
     carve_path(terrain)
     carve_caves(terrain)
     tessellate_tops(terrain)
     colour_terrain(terrain, grass, jungle_lip, jungle_cliff)
+    smooth_shade(terrain)
     ground = Ground(terrain)
     sink, unlit_sink = Sink(), Sink()
     layout_props(ground, sink, unlit_sink)
@@ -375,7 +379,7 @@ def main():
     beach_details(ground, sink)
     rim_fringe(ground, sink, grass_tuft)
     scatter(ground, sink, unlit_sink, KINDS, jungle_keep_out())
-    finish(terrain, sink, unlit_sink)
+    finish(terrain, sink, unlit_sink, sun_angle=12)
 
 
 main()

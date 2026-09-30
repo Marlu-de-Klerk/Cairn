@@ -19,6 +19,8 @@ island_core.init('desert')
 from island_core import *  # noqa: E402,F401,F403
 
 # Desert tones on top of the layout palette: redder mesa strata than the stub palette, dune sands, oasis greens.
+EXTRA_SOFT = []  # subdivision-smoothed objects joined into the Soft mesh
+
 DESERT = {
     'dune': '#EBC48A', 'duneLight': '#F5D9A6', 'duneShade': '#D6A468', 'duneDeep': '#C8935A',
     'mesaTop': '#D8955F', 'mesaSand': '#E6B47C', 'mesaDark': '#C27E50',
@@ -62,7 +64,7 @@ def mesa_offset(level, seed):
         if band % 3 == 1:
             d -= 0.035 * max(0.0, noise.noise(Vector((math.cos(a) * 4 + seed, math.sin(a) * 4, band))) * 1.8)
         # talus spreads the foot; the caprock stands a little proud of the rim
-        d += 0.07 * max(0.0, 1 - h * 3.2) ** 2
+        d += 0.06 * max(0.0, 1 - h * 3.2)  # linear, so the foot meets the ground at an angle (no z-fighting)
         if h > 0.94:
             d = 0.012
         return d
@@ -134,6 +136,8 @@ def dune(sink, x, z, y, length, width, height, yaw, seed):
     """A barchan: a long windward ramp up to a sharp crest line, a steep lee slip face, and horns that trail
     downwind (local +x). Built in rows across the wind so every row has a vertex exactly on the crest."""
     M = frame(x, z, y, yaw)
+    bm = new_bm()  # built on its own, then smoothed with a subdivision modifier
+    layer = bm.loops.layers.float_color['Col']
     rows, up, down = 13, 7, 4
     grid = []
     for j in range(rows):
@@ -154,13 +158,13 @@ def dune(sink, x, z, y, length, width, height, yaw, seed):
             if i in (0, up + down) or j in (0, rows - 1):
                 hh = -0.012
             hh *= 1 + 0.06 * noise.noise(Vector((u * 2 + seed, v * 2, 0.5)))
-            row.append(sink.bm.verts.new(M @ Vector((u * length / 2, v * width / 2, hh))))
+            row.append(bm.verts.new(M @ Vector((u * length / 2, v * width / 2, hh))))
         grid.append(row)
     faces = []
     n = up + down + 1
     for j in range(rows - 1):
         for i in range(n - 1):
-            faces.append(sink.bm.faces.new((grid[j][i], grid[j][i + 1], grid[j + 1][i + 1], grid[j + 1][i])))
+            faces.append(bm.faces.new((grid[j][i], grid[j][i + 1], grid[j + 1][i + 1], grid[j + 1][i])))
     wind = Matrix.Rotation(yaw, 4, 'Z').to_3x3() @ Vector((1, 0, 0))
     for f in faces:
         f.normal_update()
@@ -172,7 +176,8 @@ def dune(sink, x, z, y, length, width, height, yaw, seed):
             k = dune_colour(c.x, -c.y, 0.45 - 1.2 * max(0.0, lee))
             if lee > 0.25:
                 k = mix(k, col(DESERT['duneDeep']), 0.5)
-            loop[sink.layer] = k
+            loop[layer] = k
+    EXTRA_SOFT.append(smoothed(bm, 'dune', levels=1))
     return faces
 
 
@@ -764,6 +769,7 @@ def main():
     carve_caves(terrain)
     tessellate_tops(terrain, target=0.11)
     colour_terrain(terrain, desert_cap, desert_lip, desert_cliff)
+    smooth_shade(terrain, angle=50)
     ground = Ground(terrain)
     sink, unlit_sink = Sink(), Sink()
     keep_out = landmark_keep_out()
@@ -776,7 +782,7 @@ def main():
     path_stones(ground, sink)
     beach_details(ground, sink)
     scatter(ground, sink, unlit_sink, KINDS, keep_out)
-    finish(terrain, sink, unlit_sink)
+    finish(terrain, sink, unlit_sink, sun_angle=12, extra_soft=EXTRA_SOFT)
 
 
 main()

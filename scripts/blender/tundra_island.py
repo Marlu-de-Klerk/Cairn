@@ -45,7 +45,7 @@ def granite_offset(level, seed):
         buttress = noise.noise(Vector((math.cos(a) * 3.5 + seed, math.sin(a) * 3.5, h * 0.8)))
         d = 0.04 * buttress + 0.008 * noise.noise(Vector((math.cos(a) * 10, math.sin(a) * 10, h * 2 + seed)))
         d += 0.012 * math.sin(h * math.pi * 6 + seed) ** 2  # soft ledges where snow collects
-        d += 0.08 * max(0.0, 1 - h * 3.5) ** 2  # talus
+        d += 0.07 * max(0.0, 1 - h * 3.5)  # talus; linear, so the foot meets the ground at an angle
         if h > 0.93:
             d = 0.02  # snow cornice hanging over the rim
         return d
@@ -100,7 +100,7 @@ def tundra_cliff(level, h, n1, n2, x, y, z):
     k = granite(x, y, z)
     k = mix(k, col(SNOW['graniteDark']), smooth((0.14 - h) / 0.1) * 0.7)  # darker, wetter foot
     streak = noise.noise(Vector((x * 5, y * 0.8, z * 5)))
-    snow = max(smooth((h - 0.84) / 0.08), smooth((streak - 0.3) / 0.15) * smooth((h - 0.3) / 0.2))
+    snow = max(smooth((h - 0.84) / 0.08), smooth((streak - 0.42) / 0.12) * smooth((h - 0.3) / 0.2))
     return mix(k, snow_colour(x, z, -0.25), snow)
 
 
@@ -401,16 +401,11 @@ KINDS = [
 ]
 
 
-def smooth_shade(ob, angle=40):
-    """Smooth normals across the rounded walls, but keep a crisp edge where a wall meets a terrace top."""
-    for poly in ob.data.polygons:
-        poly.use_smooth = True
-    ob.data.set_sharp_from_angle(angle=math.radians(angle))
 
 
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    terrain = build_terrain(granite_offset, rings=26)
+    terrain = build_terrain(granite_offset, rings=26, step=1)
     carve_path(terrain)
     carve_caves(terrain)
     tessellate_tops(terrain, target=0.14)
@@ -427,7 +422,7 @@ def main():
     path_stones(ground, sink)
     rim_fringe(ground, sink, tundra_grass)
     scatter(ground, sink, unlit_sink, KINDS, keep_out)
-    finish(terrain, sink, unlit_sink)
+    finish(terrain, sink, unlit_sink, sun_angle=12)
 
 
 main()

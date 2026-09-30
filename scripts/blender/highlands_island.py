@@ -52,7 +52,7 @@ def crag_offset(level, seed):
         bulge = noise.noise(Vector((math.cos(a) * 3 + seed, math.sin(a) * 3, h * 1.1)))
         d = 0.045 * bulge + 0.008 * noise.noise(Vector((math.cos(a) * 9, math.sin(a) * 9, h * 2 + seed)))
         d += 0.015 * math.sin(h * math.pi * 3 + seed) ** 2
-        d += 0.09 * max(0.0, 1 - h * 3) ** 2  # scree
+        d += 0.07 * max(0.0, 1 - h * 3)  # scree; linear, so the foot meets the ground at an angle
         if h > 0.93:
             d = 0.014  # turf lip
         return d
@@ -111,10 +111,6 @@ def hl_cliff(level, h, n1, n2, x, y, z):
     return k
 
 
-def smooth_shade(ob, angle=40):
-    for poly in ob.data.polygons:
-        poly.use_smooth = True
-    ob.data.set_sharp_from_angle(angle=math.radians(angle))
 
 
 # ---------------------------------------------------------------------------------------------------------- plants and animals
@@ -612,7 +608,7 @@ KINDS = [
 
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    terrain = build_terrain(crag_offset, rings=24)
+    terrain = build_terrain(crag_offset, rings=24, step=1)
     carve_path(terrain)
     carve_caves(terrain)
     tessellate_tops(terrain, target=0.14)
@@ -632,7 +628,7 @@ def main():
     path_stones(ground, sink)
     rim_fringe(ground, sink, grass_tuft)
     scatter(ground, sink, unlit_sink, KINDS, keep_out)
-    finish(terrain, sink, unlit_sink)
+    finish(terrain, sink, unlit_sink, sun_angle=12)
 
 
 main()
