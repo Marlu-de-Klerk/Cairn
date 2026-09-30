@@ -12,7 +12,7 @@ import type { MarkUndo } from './api'
 import { showToast } from '../toast/toast'
 import { EditGoalSheet } from './EditGoalSheet'
 import type { Goal } from '../archipelago/api'
-import { formatEntryDate, formatValue, goalProgress } from '../../lib/goalProgress'
+import { formatEntryDate, formatValue, goalProgress, updateEffect } from '../../lib/goalProgress'
 import { setSheetInset } from './sheetInset'
 
 const COMPACT_QUERY = '(max-width: 639px)'
@@ -126,13 +126,26 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
     event.preventDefault()
     if (!updateTitle.trim()) return
     setErrorMessage(null)
+    const value = updateValue.trim() === '' ? null : Number(updateValue)
+    const effect = updateEffect(goal, milestones, value)
     try {
-      await addProgressEntry.mutateAsync({
-        title: updateTitle.trim(),
-        value: updateValue.trim() === '' ? null : Number(updateValue),
-        note: updateNote.trim() === '' ? null : updateNote.trim(),
-        occurredAt: updateDate || localIsoDate(),
+      const { undo, passed } = await addProgressEntry.mutateAsync({
+        input: {
+          title: updateTitle.trim(),
+          value,
+          note: updateNote.trim() === '' ? null : updateNote.trim(),
+          occurredAt: updateDate || localIsoDate(),
+        },
+        goal,
+        milestones,
       })
+      const message =
+        passed.length > 0
+          ? `Update saved. Reached ${passed.map((m) => m.title).join(' and ')}.`
+          : effect.currentValue !== null
+            ? `Update saved. Progress is now ${formatValue(effect.currentValue, goal.unit)}.`
+            : 'Update saved.'
+      showToast(message, { label: 'Undo', run: () => undoMark.mutateAsync(undo) })
     } catch {
       setErrorMessage("Couldn't save. Try again.")
       return
@@ -239,11 +252,17 @@ export function RoadmapPanel({ goal }: RoadmapPanelProps) {
                 <input
                   value={updateValue}
                   onChange={(event) => setUpdateValue(event.target.value)}
-                  placeholder={`Value (${goal.unit ?? 'optional'})`}
+                  placeholder={`Where you're at now${goal.unit ? ` (${goal.unit})` : ''}, optional`}
+                  aria-describedby="update-value-hint"
                   type="number"
                   step="any"
                   className="rounded border border-stone-light bg-ink px-2 py-1 text-xs text-mist"
                 />
+              ) : null}
+              {goal.kind === 'numeric' ? (
+                <p id="update-value-hint" className="-mt-0.5 text-[11px] leading-snug text-mist/50">
+                  Further than {formatValue(goal.currentValue, goal.unit)}? Your progress moves up to it.
+                </p>
               ) : null}
               <textarea
                 value={updateNote}

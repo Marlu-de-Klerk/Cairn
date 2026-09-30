@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatEntryDate, formatValue, goalProgress } from './goalProgress'
+import { formatEntryDate, formatValue, goalProgress, updateEffect } from './goalProgress'
 import type { ProgressGoal, ProgressMilestone } from './goalProgress'
 
 const run10k: ProgressGoal = { title: 'Run a 10K', kind: 'numeric', status: 'active', unit: 'km', startValue: 0, targetValue: 10, currentValue: 5 }
@@ -44,6 +44,10 @@ describe('goalProgress', () => {
     expect(goalProgress({ ...run10k, kind: 'checklist', status: 'completed' }, ms(true)).summary).toBe('Complete')
   })
 
+  it('prompts to complete once the value reaches the target', () => {
+    expect(goalProgress({ ...run10k, currentValue: 10 }, ms(true, true, true), 'en-GB').next).toBe('Target reached: complete the goal')
+  })
+
   it('clamps a value past the target', () => {
     expect(goalProgress({ ...run10k, currentValue: 12 }, []).fraction).toBe(1)
   })
@@ -62,5 +66,31 @@ describe('formatEntryDate', () => {
 
   it('passes through anything that is not a date', () => {
     expect(formatEntryDate('soon', today)).toBe('soon')
+  })
+})
+
+describe('updateEffect', () => {
+  // milestones at 2, 4, 6; the first is done; current value 3
+  const goal: ProgressGoal = { ...run10k, currentValue: 3 }
+  const milestones = ms(true, false, false)
+
+  it('moves progress up to a further value and marks the milestones it reaches', () => {
+    expect(updateEffect(goal, milestones, 6.5)).toEqual({ currentValue: 6.5, passedMilestones: [1, 2] })
+    expect(updateEffect(goal, milestones, 5)).toEqual({ currentValue: 5, passedMilestones: [1] })
+  })
+
+  it('never moves progress back, or on an update without a value', () => {
+    expect(updateEffect(goal, milestones, 2.5)).toEqual({ currentValue: null, passedMilestones: [] })
+    expect(updateEffect(goal, milestones, 3)).toEqual({ currentValue: null, passedMilestones: [] })
+    expect(updateEffect(goal, milestones, null)).toEqual({ currentValue: null, passedMilestones: [] })
+  })
+
+  it('leaves checklist and completed goals alone', () => {
+    expect(updateEffect({ ...goal, kind: 'checklist' }, milestones, 9).currentValue).toBeNull()
+    expect(updateEffect({ ...goal, status: 'completed' }, milestones, 9).currentValue).toBeNull()
+  })
+
+  it('goes past the target without completing anything beyond the milestones', () => {
+    expect(updateEffect(goal, milestones, 12)).toEqual({ currentValue: 12, passedMilestones: [1, 2] })
   })
 })

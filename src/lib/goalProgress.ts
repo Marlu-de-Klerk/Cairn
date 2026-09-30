@@ -38,9 +38,12 @@ export function goalProgress(goal: ProgressGoal, milestones: readonly ProgressMi
   const done = milestones.filter((m) => m.completedAt !== null).length
   const complete = goal.status === 'completed'
   const nextMilestone = milestones.find((m) => m.completedAt === null)
+  const reached = goal.kind === 'numeric' && goal.targetValue !== null && goal.currentValue >= goal.targetValue
   const next = complete
     ? null
-    : nextMilestone
+    : reached
+      ? 'Target reached: complete the goal'
+      : nextMilestone
       ? `Next: ${nextMilestone.title}`
       : goal.kind === 'numeric' && goal.targetValue !== null
         ? `Last step: reach ${formatValue(goal.targetValue, goal.unit, locale)}`
@@ -78,4 +81,25 @@ export function formatEntryDate(iso: string, today: Date = new Date(), locale?: 
     month: 'short',
     ...(year === today.getFullYear() ? {} : { year: 'numeric' }),
   })
+}
+
+export interface UpdateEffect {
+  /** The goal's new current_value, or null when the update doesn't move it. */
+  readonly currentValue: number | null
+  /** Indexes (into the sorted milestones) of the not-yet-done milestones the new value reaches, in trail order. */
+  readonly passedMilestones: readonly number[]
+}
+
+/**
+ * What logging an update with `value` does to a numeric goal. The value is where the user is now ("ran 6.5 km"): if it's
+ * further than the goal's current value, progress moves up to it and every milestone it reaches is marked done (the
+ * trail head never passes an unmarked milestone, see progressT). A lower value (a slower day) moves nothing, and
+ * reaching the target never completes the goal by itself.
+ */
+export function updateEffect(goal: ProgressGoal, milestones: readonly ProgressMilestone[], value: number | null): UpdateEffect {
+  if (goal.kind !== 'numeric' || goal.status !== 'active' || value === null || !Number.isFinite(value) || value <= goal.currentValue) {
+    return { currentValue: null, passedMilestones: [] }
+  }
+  const passedMilestones = milestones.flatMap((m, i) => (m.completedAt === null && m.targetValue !== null && m.targetValue <= value ? [i] : []))
+  return { currentValue: value, passedMilestones }
 }

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import type { Goal } from '../archipelago/api'
+import { updateEffect } from '../../lib/goalProgress'
 
 export interface Milestone {
   id: string
@@ -125,10 +126,16 @@ function invalidateGoalData(queryClient: ReturnType<typeof useQueryClient>, goal
  * when this happens to be the last real milestone (there is always at
  * least one more step: the final target itself).
  */
-/** What it takes to reverse a mark-done: the journey entry it added and the value it replaced. */
-export type MarkUndo =
-  | { readonly kind: 'milestone'; readonly milestoneId: string; readonly entryId: string; readonly previousValue: number }
-  | { readonly kind: 'goal'; readonly entryId: string; readonly previousValue: number }
+/**
+ * What it takes to reverse a mark-done or a progress update: the milestones it marked done, the journey entries it
+ * added, the value it replaced, and whether it completed the goal.
+ */
+export interface MarkUndo {
+  readonly milestoneIds: readonly string[]
+  readonly entryIds: readonly string[]
+  readonly previousValue: number
+  readonly reopenGoal: boolean
+}
 
 export function useMarkMilestoneDone(goalId: string) {
   const queryClient = useQueryClient()
@@ -161,7 +168,7 @@ export function useMarkMilestoneDone(goalId: string) {
           .eq('id', goalId)
         if (goalError) throw goalError
       }
-      return { kind: 'milestone', milestoneId: milestone.id, entryId: entry.id, previousValue }
+      return { milestoneIds: [milestone.id], entryIds: [entry.id], previousValue, reopenGoal: false }
     },
     onSuccess: () => invalidateGoalData(queryClient, goalId),
   })
@@ -204,30 +211,30 @@ export function useCompleteGoal(goalId: string) {
         .select('id')
         .single()
       if (entryError) throw entryError
-      return { kind: 'goal', entryId: entry.id, previousValue: goal.currentValue }
+      return { milestoneIds: [], entryIds: [entry.id], previousValue: goal.currentValue, reopenGoal: true }
     },
     onSuccess: () => invalidateGoalData(queryClient, goalId),
   })
 }
 
 /**
- * Reverses a mark-done from its MarkUndo: the milestone (or the goal) goes back to not done, its journey entry is
- * removed and the goal's current_value returns to what it was.
+ * Reverses a mark-done or an update from its MarkUndo: the milestones (or the goal) go back to not done, the journey
+ * entries are removed and the goal's current_value returns to what it was.
  */
 export function useUndoMark(goalId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (undo: MarkUndo) => {
-      if (undo.kind === 'milestone') {
-        const { error } = await supabase.from('milestones').update({ completed_at: null }).eq('id', undo.milestoneId)
+      if (undo.milestoneIds.length > 0) {
+        const { error } = await supabase.from('milestones').update({ completed_at: null }).in('id', [...undo.milestoneIds])
         if (error) throw error
       }
       const { error: goalError } = await supabase
         .from('goals')
-        .update(undo.kind === 'goal' ? { status: 'active', completed_at: null, current_value: undo.previousValue } : { current_value: undo.previousValue })
+        .update(undo.reopenGoal ? { status: 'active', completed_at: null, current_value: undo.previousValue } : { current_value: undo.previousValue })
         .eq('id', goalId)
       if (goalError) throw goalError
-      const { error: entryError } = await supabase.from('progress_entries').delete().eq('id', undo.entryId)
+      const { error: entryError } = await supabase.from('progress_entries').delete().in('id', [...undo.entryIds])
       if (entryError) throw entryError
     },
     onSuccess: () => invalidateGoalData(queryClient, goalId),
@@ -241,25 +248,60 @@ export interface AddUpdateInput {
   occurredAt: string
 }
 
-/** A progress update never bumps current_value or completes anything —
- * spec §6.3 describes it purely as a compact logged note that lands on
- * the trail at its own computed position. */
+/**
+ * Logs a progress update. On a numeric goal its value is where the user is now: a value further than the goal's
+ * current value moves progress up to it and marks done every milestone it reaches, each with its own journey entry
+ * (see updateEffect in src/lib/goalProgress.ts). It never completes the goal: that stays an explicit step.
+ * Resolves to what it takes to undo it, and to the milestones it passed.
+ */
 export function useAddProgressEntry(goalId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (input: AddUpdateInput) => {
-      const { error } = await supabase.from('progress_entries').insert({
-        goal_id: goalId,
-        milestone_id: null,
-        kind: 'update',
-        title: input.title,
-        value: input.value,
-        note: input.note,
-        occurred_at: input.occurredAt,
-      })
+    mutationFn: async ({ input, goal, milestones }: { input: AddUpdateInput; goal: Goal; milestones: Milestone[] }): Promise<{ undo: MarkUndo; passed: Milestone[] }> => {
+      const { data: entry, error } = await supabase
+        .from('progress_entries')
+        .insert({
+          goal_id: goalId,
+          milestone_id: null,
+          kind: 'update',
+          title: input.title,
+          value: input.value,
+          note: input.note,
+          occurred_at: input.occurredAt,
+        })
+        .select('id')
+        .single()
       if (error) throw error
+
+      const effect = updateEffect(goal, milestones, input.value)
+      const passed = effect.passedMilestones.map((i) => milestones[i])
+      const entryIds = [entry.id]
+      const nowIso = new Date().toISOString()
+      for (const milestone of passed) {
+        const { error: milestoneError } = await supabase.from('milestones').update({ completed_at: nowIso }).eq('id', milestone.id)
+        if (milestoneError) throw milestoneError
+        const { data: milestoneEntry, error: milestoneEntryError } = await supabase
+          .from('progress_entries')
+          .insert({
+            goal_id: goalId,
+            milestone_id: milestone.id,
+            kind: 'milestone',
+            title: milestone.title,
+            value: milestone.targetValue,
+            occurred_at: input.occurredAt,
+          })
+          .select('id')
+          .single()
+        if (milestoneEntryError) throw milestoneEntryError
+        entryIds.push(milestoneEntry.id)
+      }
+      if (effect.currentValue !== null) {
+        const { error: goalError } = await supabase.from('goals').update({ current_value: effect.currentValue }).eq('id', goalId)
+        if (goalError) throw goalError
+      }
+      return { undo: { milestoneIds: passed.map((m) => m.id), entryIds, previousValue: goal.currentValue, reopenGoal: false }, passed }
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['progress-entries', goalId] }),
+    onSuccess: () => invalidateGoalData(queryClient, goalId),
   })
 }
 
