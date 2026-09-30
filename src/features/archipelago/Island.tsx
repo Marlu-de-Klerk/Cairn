@@ -50,7 +50,9 @@ function Label({ goal, labelY, hovered, occlude }: { goal: Goal; labelY: number;
   return (
     <Html position={[0, labelY, 0]} occlude={occlude} style={{ pointerEvents: 'none' }}>
       <div
-        className={`-translate-x-1/2 -translate-y-full rounded-md border-t-2 bg-stone/90 font-body text-mist shadow-md backdrop-blur-sm ${
+        data-island-label
+        data-pinned={hovered}
+        className={`-translate-x-1/2 -translate-y-full rounded-md border-t-2 transition-opacity duration-150 bg-stone/90 font-body text-mist shadow-md backdrop-blur-sm ${
           hovered ? 'w-56 p-3 text-sm' : 'flex max-w-[18rem] items-baseline gap-1.5 whitespace-nowrap px-2 py-1 text-xs'
         }`}
         style={{ borderTopColor: accentColor }}

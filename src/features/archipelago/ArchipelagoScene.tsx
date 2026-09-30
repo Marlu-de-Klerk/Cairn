@@ -7,6 +7,7 @@ import { Island } from './Island'
 import { SceneEnvironment } from './SceneEnvironment'
 import { HullRegistryProvider } from './hullRegistry'
 import { CameraRig } from './CameraRig'
+import { LabelDeclutter } from './LabelDeclutter'
 import { RoadmapTrail } from '../roadmap/RoadmapTrail'
 import { ISLAND_YAW } from '../../lib/island/orientation'
 import { preloadHandBuiltIslands } from './models/HandBuiltIsland'
@@ -80,7 +81,8 @@ export function ArchipelagoScene({ showCompleted }: ArchipelagoSceneProps) {
           </group>
         ) : null}
         </HullRegistryProvider>
-        <CameraRig focusedGoal={focusedGoal} initialAzimuth={initialAzimuth} onExitFocus={() => navigate('/')} />
+        <LabelDeclutter />
+        <CameraRig focusedGoal={focusedGoal} islands={islands} initialAzimuth={initialAzimuth} onExitFocus={() => navigate('/')} />
       </Canvas>
     </div>
   )
