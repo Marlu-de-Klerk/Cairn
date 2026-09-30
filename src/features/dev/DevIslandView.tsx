@@ -60,8 +60,10 @@ function useBuildStats(biome: Goal['biome'], params: DevParams, out: RefObject<H
 export function DevIslandView() {
   const { biome: raw = 'jungle' } = useParams()
   const biome = BIOMES.includes(raw as Goal['biome']) ? (raw as Goal['biome']) : 'jungle'
-  const [search] = useSearchParams()
+  const [search, setSearch] = useSearchParams()
   const params = parseDevParams(search)
+  const overviewIslands = Array.from({ length: params.view === 'overview' ? params.islands : 0 }, (_, i) => islandPosition(i, OVERVIEW_ARCHIPELAGO_SEED))
+  const islandCentres = params.view === 'overview' ? overviewIslands.map((at) => [at.x, at.z] as const) : [[0, 0] as const]
   const focusView = isFocusView(params.view)
   const preset = PRESETS[focusView ? 'hero' : (params.view as PresetView)]
   const position = preset.position.map((p, i) => preset.target[i] + (p - preset.target[i]) * params.dist) as [number, number, number]
@@ -74,12 +76,11 @@ export function DevIslandView() {
   return (
     <div className="fixed inset-0 bg-[#EAF6F6]">
       <Canvas flat camera={{ position, fov: 50 }}>
-        <SceneEnvironment />
+        <SceneEnvironment islands={islandCentres} />
         <HullRegistryProvider>
           <Suspense fallback={null}>
             {params.view === 'overview' ? (
-              Array.from({ length: params.islands }, (_, i) => {
-                const at = islandPosition(i, OVERVIEW_ARCHIPELAGO_SEED)
+              overviewIslands.map((at, i) => {
                 const islandBiome = i === 0 ? biome : BIOMES[i % BIOMES.length]
                 const islandGoal: Goal = { ...devGoal(islandBiome, params.seed + i, params.head), islandX: at.x, islandZ: at.z, islandRotation: at.rotation }
                 return (
@@ -97,7 +98,16 @@ export function DevIslandView() {
           </Suspense>
         </HullRegistryProvider>
         {focusView ? (
-          <CameraRig focusedGoal={goal} seedOverride={params.seed} devOrbit={params.orbit} />
+          <CameraRig
+            focusedGoal={goal}
+            seedOverride={params.seed}
+            devOrbit={params.orbit}
+            onExitFocus={() => setSearch((prev) => {
+              const next = new URLSearchParams(prev)
+              next.set('view', 'overview')
+              return next
+            })}
+          />
         ) : (
           <OrbitControls target={preset.target} />
         )}

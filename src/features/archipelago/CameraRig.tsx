@@ -7,6 +7,7 @@ import { focusPose } from '../../lib/island/anchors'
 import { hashGoalId } from '../../lib/theme'
 import { islandLayoutSeed } from '../../lib/island/fixedIslands'
 import { getIslandLayout } from './terrain/islandCache'
+import { OVERVIEW_ZOOM, clampZoom, easeZoom, stepFocusZoom, wheelFactor } from '../../lib/cameraZoom'
 
 const ORBIT_RADIUS = 30
 const ORBIT_ELEVATION = (35 * Math.PI) / 180 // spec §6.1: "looking down at maybe 35°"
@@ -21,11 +22,12 @@ function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3)
 }
 
-function orbitPosition(azimuth: number): Vector3 {
+function orbitPosition(azimuth: number, zoom: number): Vector3 {
+  const radius = ORBIT_RADIUS * zoom
   return new Vector3(
-    ORBIT_RADIUS * Math.cos(ORBIT_ELEVATION) * Math.cos(azimuth),
-    ORBIT_RADIUS * Math.sin(ORBIT_ELEVATION),
-    ORBIT_RADIUS * Math.cos(ORBIT_ELEVATION) * Math.sin(azimuth),
+    radius * Math.cos(ORBIT_ELEVATION) * Math.cos(azimuth),
+    radius * Math.sin(ORBIT_ELEVATION),
+    radius * Math.cos(ORBIT_ELEVATION) * Math.sin(azimuth),
   )
 }
 
@@ -42,9 +44,11 @@ interface CameraRigProps {
   seedOverride?: number
   /** DEV harness only: a fixed focus orbit angle; disables drag-to-orbit. */
   devOrbit?: number
+  /** Called when the viewer keeps zooming out past the focused island's limit: go back to the archipelago. */
+  onExitFocus?: () => void
 }
 
-export function CameraRig({ focusedGoal, initialAzimuth, seedOverride, devOrbit }: CameraRigProps) {
+export function CameraRig({ focusedGoal, initialAzimuth, seedOverride, devOrbit, onExitFocus }: CameraRigProps) {
   const { camera, gl, size, invalidate } = useThree()
   const azimuth = useRef(0)
   // Spec §5.6.1: the focus orbit is separate from the overview azimuth, so orbiting an island never moves where the
@@ -62,6 +66,18 @@ export function CameraRig({ focusedGoal, initialAzimuth, seedOverride, devOrbit 
   const transitionStartLookAt = useRef<Vector3 | null>(null)
   const currentLookAt = useRef(new Vector3(0, 0, 0))
   const transitionElapsed = useRef(0)
+  // Zoom: a multiplier on the overview orbit radius, and separately on the focus pose's camera offset. Wheel and
+  // pinch move the targets; the current values ease toward them each frame.
+  const overviewZoom = useRef(1)
+  const overviewZoomTarget = useRef(1)
+  const focusZoom = useRef(1)
+  const focusZoomTarget = useRef(1)
+  const focusOvershoot = useRef(0)
+  const focusedRef = useRef(focusedGoal !== null)
+  focusedRef.current = focusedGoal !== null
+  const exitRef = useRef(onExitFocus)
+  exitRef.current = onExitFocus
+  const exiting = useRef(false)
 
   // Manual drag-to-orbit, plus the permanent auto-rotate stop (spec §6.1:
   // "stops rotating the moment I touch it and doesn't resume"). Attached to
@@ -76,13 +92,61 @@ export function CameraRig({ focusedGoal, initialAzimuth, seedOverride, devOrbit 
     const handleAnyPointerDown = () => {
       suppressNextClick.current = false
     }
+    // Zoom by a multiplier (> 1 = out). While focused, a sustained zoom-out past the limit leaves the island.
+    let lastZoomAt = 0
+    const zoomBy = (factor: number) => {
+      hasInteracted.current = true
+      if (focusedRef.current) {
+        if (exiting.current) return
+        const now = performance.now()
+        const next = stepFocusZoom({ zoom: focusZoomTarget.current, overshoot: focusOvershoot.current }, factor, now - lastZoomAt)
+        lastZoomAt = now
+        focusZoomTarget.current = next.zoom
+        focusOvershoot.current = next.overshoot
+        if (next.exit && exitRef.current) {
+          exiting.current = true
+          focusOvershoot.current = 0
+          exitRef.current()
+        }
+      } else {
+        overviewZoomTarget.current = clampZoom(overviewZoomTarget.current * factor, OVERVIEW_ZOOM)
+      }
+      invalidate()
+    }
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      zoomBy(wheelFactor(event.deltaY, event.deltaMode))
+    }
+
+    // Two fingers pinch-zoom; one finger drags to orbit.
+    const pointers = new Map<number, { x: number; y: number }>()
+    let pinchDistance = 0
+    const spread = () => {
+      const [a, b] = [...pointers.values()]
+      return Math.hypot(a.x - b.x, a.y - b.y)
+    }
+
     const handlePointerDown = (event: PointerEvent) => {
       hasInteracted.current = true
+      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      if (pointers.size === 2) {
+        isDragging.current = false
+        pinchDistance = spread()
+        suppressNextClick.current = true
+        return
+      }
       isDragging.current = true
       lastPointerX.current = event.clientX
       pressOriginX.current = event.clientX
     }
     const handlePointerMove = (event: PointerEvent) => {
+      if (pointers.has(event.pointerId)) pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      if (pointers.size === 2) {
+        const now = spread()
+        if (pinchDistance > 0 && now > 0) zoomBy(pinchDistance / now)
+        pinchDistance = now
+        return
+      }
       if (!isDragging.current) return
       const deltaX = event.clientX - lastPointerX.current
       if (orbitEnabled.current) {
@@ -99,7 +163,9 @@ export function CameraRig({ focusedGoal, initialAzimuth, seedOverride, devOrbit 
         suppressNextClick.current = true
       }
     }
-    const handlePointerUp = () => {
+    const handlePointerUp = (event: PointerEvent) => {
+      pointers.delete(event.pointerId)
+      pinchDistance = 0
       isDragging.current = false
     }
 
@@ -118,8 +184,12 @@ export function CameraRig({ focusedGoal, initialAzimuth, seedOverride, devOrbit 
     element.addEventListener('pointerdown', handlePointerDown)
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup', handlePointerUp)
+    window.addEventListener('pointercancel', handlePointerUp)
     window.addEventListener('click', handleClickCapture, true)
+    element.addEventListener('wheel', handleWheel, { passive: false })
     return () => {
+      element.removeEventListener('wheel', handleWheel)
+      window.removeEventListener('pointercancel', handlePointerUp)
       window.removeEventListener('pointerdown', handleAnyPointerDown, true)
       element.removeEventListener('pointerdown', handlePointerDown)
       window.removeEventListener('pointermove', handlePointerMove)
@@ -151,7 +221,17 @@ export function CameraRig({ focusedGoal, initialAzimuth, seedOverride, devOrbit 
       transitionStartLookAt.current = currentLookAt.current.clone()
       transitionElapsed.current = 0
       orbit.current = 0
+      // every island opens at its own framing; leaving one by zooming out doesn't carry that zoom back
+      focusZoom.current = focusZoomTarget.current = 1
+      focusOvershoot.current = 0
+      exiting.current = false
     }
+
+    // Ease the zoom toward where the wheel or pinch put it; under the demand frameloop, keep asking for frames
+    // until it settles.
+    overviewZoom.current = easeZoom(overviewZoom.current, overviewZoomTarget.current, delta)
+    focusZoom.current = easeZoom(focusZoom.current, focusZoomTarget.current, delta)
+    if (Math.abs(focusZoom.current - focusZoomTarget.current) > 1e-4 || Math.abs(overviewZoom.current - overviewZoomTarget.current) > 1e-4) invalidate()
 
     const isTransitioning = transitionStart.current !== null
     orbitEnabled.current = focusedGoal !== null && !isTransitioning && devOrbit === undefined
@@ -174,10 +254,12 @@ export function CameraRig({ focusedGoal, initialAzimuth, seedOverride, devOrbit 
         orbit: devOrbit ?? orbit.current,
       })
       const island = new Vector3(focusedGoal.islandX, 0, focusedGoal.islandZ)
-      desiredPosition = island.clone().add(new Vector3(...pose.position))
-      desiredLookAt = island.add(new Vector3(...pose.lookAt))
+      desiredLookAt = island.clone().add(new Vector3(...pose.lookAt))
+      // zoom slides the camera along its line of sight to the island
+      const offset = new Vector3(...pose.position).sub(new Vector3(...pose.lookAt)).multiplyScalar(focusZoom.current)
+      desiredPosition = desiredLookAt.clone().add(offset)
     } else {
-      desiredPosition = orbitPosition(azimuth.current)
+      desiredPosition = orbitPosition(azimuth.current, overviewZoom.current)
       desiredLookAt = new Vector3(0, 0, 0)
     }
 
