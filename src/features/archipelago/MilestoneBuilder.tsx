@@ -52,7 +52,7 @@ export function MilestoneBuilder({ kind, milestones, errors, onChange, showPrevi
                 value={row.title}
                 onChange={(e) => updateRow(index, { title: e.target.value })}
                 placeholder={`Milestone ${index + 1}`}
-                className="w-full rounded-md border border-stone-light bg-ink px-3 py-1.5 font-body text-sm text-mist"
+                className="w-full rounded-xl border border-stone-light bg-ink px-3 py-1.5 font-body text-sm text-mist"
               />
               {kind === 'numeric' ? (
                 <input
@@ -62,7 +62,7 @@ export function MilestoneBuilder({ kind, milestones, errors, onChange, showPrevi
                   placeholder="Value"
                   readOnly={row.locked}
                   aria-label={`Milestone ${index + 1} value`}
-                  className="mt-1 w-full rounded-md border border-stone-light bg-ink px-3 py-1.5 font-body text-sm text-mist read-only:opacity-60"
+                  className="mt-1 w-full rounded-xl border border-stone-light bg-ink px-3 py-1.5 font-body text-sm text-mist read-only:opacity-60"
                 />
               ) : null}
               {errors[index] ? <p className="mt-1 font-body text-xs text-accent-error">{errors[index]}</p> : null}
@@ -105,7 +105,7 @@ function TrailPreview({ count }: { count: number }) {
   )
 
   return (
-    <div className="h-28 overflow-hidden rounded-md border border-stone-light bg-ink">
+    <div className="h-28 overflow-hidden rounded-xl border border-stone-light bg-ink">
       <Canvas camera={{ position: [5.2, 4.4, 5.2], fov: 40 }} frameloop="demand" flat events={noPointerEvents} onCreated={({ camera }) => camera.lookAt(0, 0.9, 0)}>
         <group rotation={[0, ISLAND_YAW, 0]}>
           <mesh geometry={ribbon}>

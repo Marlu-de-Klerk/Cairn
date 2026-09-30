@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { callbackErrorCode, signInErrorMessage } from './authCallback'
+import { callbackErrorCode, signInErrorMessage, signInFailureMessage } from './authCallback'
 
 describe('callbackErrorCode', () => {
   it('is null for a successful callback', () => {
@@ -23,5 +23,23 @@ describe('signInErrorMessage', () => {
     expect(signInErrorMessage('sign-in-failed')).toMatch(/try again/i)
     expect(signInErrorMessage('<script>')).toBeNull()
     expect(signInErrorMessage(null)).toBeNull()
+  })
+})
+
+describe('signInFailureMessage', () => {
+  it('explains a rate limit', () => {
+    expect(signInFailureMessage({ message: 'email rate limit exceeded', status: 429, code: 'over_email_send_rate_limit' })).toMatch(/wait a minute/i)
+  })
+
+  it('explains a bad address', () => {
+    expect(signInFailureMessage({ message: 'Email address "x@y" is invalid', status: 400, code: 'email_address_invalid' })).toMatch(/doesn't look right/)
+  })
+
+  it('explains a network failure', () => {
+    expect(signInFailureMessage({ message: 'Failed to fetch' })).toMatch(/connection/)
+  })
+
+  it('never shows the raw message for anything else', () => {
+    expect(signInFailureMessage({ message: 'unexpected_failure: boom', status: 500 })).toBe("Couldn't send the link. Try again in a moment.")
   })
 })

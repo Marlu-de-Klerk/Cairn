@@ -79,7 +79,7 @@ export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverla
   return (
     <div className="pointer-events-none relative flex h-full flex-col">
       <header className="pointer-events-auto flex items-center justify-between bg-stone/80 p-4 backdrop-blur-sm">
-        <Link to="/" className="rounded font-display text-lg text-mist">
+        <Link to="/" className="rounded-xl font-display text-lg text-mist">
           Cairn
         </Link>
 
@@ -88,7 +88,7 @@ export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverla
             <button
               type="button"
               onClick={onToggleShowCompleted}
-              className="rounded-md border border-stone-light px-3 py-1.5 text-xs text-mist"
+              className="rounded-full border border-stone-light px-3 py-1.5 text-xs text-mist"
             >
               {showCompleted ? 'Hide completed' : 'Show completed'}
             </button>
@@ -97,7 +97,7 @@ export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverla
           <button
             type="button"
             onClick={() => setNewGoalOpen(true)}
-            className="rounded-md bg-lantern px-3 py-1.5 text-xs font-medium text-ink"
+            className="rounded-full bg-lantern px-3 py-1.5 text-xs font-medium text-ink"
           >
             New goal
           </button>
@@ -106,7 +106,7 @@ export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverla
             type="button"
             disabled
             title="Coming soon"
-            className="cursor-not-allowed rounded-md border border-stone-light px-3 py-1.5 text-xs text-mist opacity-50"
+            className="cursor-not-allowed rounded-full border border-stone-light px-3 py-1.5 text-xs text-mist opacity-50"
           >
             Explore
           </button>
@@ -124,12 +124,12 @@ export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverla
               {session?.user.email?.[0]?.toUpperCase() ?? '?'}
             </button>
             {avatarMenuOpen ? (
-              <div className="absolute right-0 mt-2 w-48 rounded-md border border-stone-light bg-stone p-2 text-xs text-mist shadow-lg">
+              <div className="absolute right-0 mt-2 w-48 origin-top-right animate-pop rounded-2xl border border-stone-light bg-stone p-2 text-xs text-mist shadow-lg">
                 <p className="truncate px-2 py-1 text-mist/60">{session?.user.email}</p>
                 <button
                   type="button"
                   onClick={() => supabase.auth.signOut()}
-                  className="w-full rounded px-2 py-1 text-left hover:bg-stone-light"
+                  className="w-full rounded-full px-2 py-1 text-left hover:bg-stone-light"
                 >
                   Sign out
                 </button>
@@ -144,21 +144,21 @@ export function HomeOverlay({ showCompleted, onToggleShowCompleted }: HomeOverla
           <button
             type="button"
             onClick={() => navigate('/')}
-            className="pointer-events-auto absolute left-4 top-4 flex items-center gap-1.5 rounded-md border border-stone-light bg-stone/90 px-3 py-2 text-sm text-mist shadow-lg backdrop-blur-sm hover:bg-stone-light"
+            className="pointer-events-auto absolute left-4 top-4 flex animate-fade items-center gap-1.5 rounded-full border border-stone-light bg-stone/90 px-3 py-2 text-sm text-mist shadow-lg backdrop-blur-sm hover:bg-stone-light"
           >
             <span aria-hidden="true">←</span> All islands
           </button>
         ) : null}
         {showMissingNotice ? (
           <div className="pointer-events-none absolute inset-x-0 top-4 flex justify-center px-4">
-            <p role="status" className="pointer-events-auto rounded-md border border-stone-light bg-stone/90 px-4 py-2 text-sm text-mist backdrop-blur-sm">
+            <p role="status" className="pointer-events-auto animate-pop rounded-full border border-stone-light bg-stone/90 px-4 py-2 text-sm text-mist backdrop-blur-sm">
               That island couldn't be found.
             </p>
           </div>
         ) : null}
         {showError ? (
           <div className="pointer-events-none flex h-full items-center justify-center">
-            <div className="pointer-events-auto max-w-xs rounded-md border border-stone-light bg-stone/80 p-4 text-center text-sm text-mist backdrop-blur-sm">
+            <div className="pointer-events-auto max-w-xs rounded-2xl border border-stone-light bg-stone/80 p-4 text-center text-sm text-mist backdrop-blur-sm">
               <p>Couldn't load your archipelago. Try refreshing.</p>
             </div>
           </div>

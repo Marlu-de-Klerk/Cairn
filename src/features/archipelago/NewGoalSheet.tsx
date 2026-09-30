@@ -21,12 +21,12 @@ interface NewGoalSheetProps {
 // is a quiet filled neutral (bg-stone-light/text-mist), not an outline —
 // see this task's report for the design-system ruling this follows.
 const CONTINUE_BUTTON_CLASS =
-  'rounded-md border border-stone-light bg-stone-light px-4 py-2 font-body text-sm font-medium text-mist disabled:opacity-40'
+  'rounded-full border border-stone-light bg-stone-light px-4 py-2 font-body text-sm font-medium text-mist disabled:opacity-40'
 
 // The one lantern-filled button in this flow — the actual birth-of-a-goal
 // moment (Ruling 6), distinct from the quiet CONTINUE_BUTTON_CLASS used for
 // mere wizard navigation above.
-const CREATE_BUTTON_CLASS = 'rounded-md bg-lantern px-4 py-2 font-body text-sm font-medium text-ink disabled:opacity-40'
+const CREATE_BUTTON_CLASS = 'rounded-full bg-lantern px-4 py-2 font-body text-sm font-medium text-ink disabled:opacity-40'
 
 export function NewGoalSheet({ open, onOpenChange, onCreated }: NewGoalSheetProps) {
   const [step, setStep] = useState<Step>(1)
@@ -98,13 +98,13 @@ export function NewGoalSheet({ open, onOpenChange, onCreated }: NewGoalSheetProp
       }}
     >
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-ink/60 backdrop-blur-sm" />
-        <Dialog.Content className="fixed inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-stone-light bg-stone p-6 text-mist sm:inset-x-auto sm:right-6 sm:top-6 sm:bottom-6 sm:w-[420px] sm:rounded-2xl sm:border">
+        <Dialog.Overlay className="fixed inset-0 animate-fade bg-ink/60 backdrop-blur-sm" />
+        <Dialog.Content className="fixed inset-x-0 bottom-0 max-h-[85vh] animate-rise overflow-y-auto rounded-t-3xl border-t border-stone-light bg-stone p-6 text-mist sm:inset-x-auto sm:right-6 sm:top-6 sm:bottom-6 sm:w-[420px] sm:rounded-3xl sm:border">
           <Dialog.Title className="font-display text-xl">New goal</Dialog.Title>
           <StepIndicator current={step} />
 
           {step === 1 ? (
-            <section className="mt-4">
+            <section className="mt-4 animate-rise">
               <p className="font-body text-sm text-mist/70">Pick a biome for this goal's island.</p>
               <div className="mt-3">
                 <BiomePicker value={biome} onChange={setBiome} />
@@ -118,13 +118,13 @@ export function NewGoalSheet({ open, onOpenChange, onCreated }: NewGoalSheetProp
           ) : null}
 
           {step === 2 ? (
-            <section className="mt-4 space-y-4">
+            <section className="mt-4 animate-rise space-y-4">
               <label className="block">
                 <span className="font-body text-sm text-mist/70">Title</span>
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-stone-light bg-ink px-3 py-2 font-body text-sm text-mist"
+                  className="mt-1 w-full rounded-xl border border-stone-light bg-ink px-3 py-2 font-body text-sm text-mist"
                   placeholder="Run 10K"
                 />
               </label>
@@ -152,7 +152,7 @@ export function NewGoalSheet({ open, onOpenChange, onCreated }: NewGoalSheetProp
                       value={targetValue}
                       onChange={(e) => setTargetValue(e.target.value)}
                       inputMode="decimal"
-                      className="mt-1 w-full rounded-md border border-stone-light bg-ink px-3 py-2 font-body text-sm text-mist"
+                      className="mt-1 w-full rounded-xl border border-stone-light bg-ink px-3 py-2 font-body text-sm text-mist"
                       placeholder="10"
                       aria-invalid={targetValue.trim() !== '' && !!detailErrors.target}
                     />
@@ -166,7 +166,7 @@ export function NewGoalSheet({ open, onOpenChange, onCreated }: NewGoalSheetProp
                       value={unit}
                       onChange={(e) => setUnit(e.target.value)}
                       list="unit-suggestions"
-                      className="mt-1 w-full rounded-md border border-stone-light bg-ink px-3 py-2 font-body text-sm text-mist"
+                      className="mt-1 w-full rounded-xl border border-stone-light bg-ink px-3 py-2 font-body text-sm text-mist"
                       placeholder="km"
                     />
                     <datalist id="unit-suggestions">
@@ -183,7 +183,7 @@ export function NewGoalSheet({ open, onOpenChange, onCreated }: NewGoalSheetProp
                       value={startValue}
                       onChange={(e) => setStartValue(e.target.value)}
                       inputMode="decimal"
-                      className="mt-1 w-full rounded-md border border-stone-light bg-ink px-3 py-2 font-body text-sm text-mist"
+                      className="mt-1 w-full rounded-xl border border-stone-light bg-ink px-3 py-2 font-body text-sm text-mist"
                       aria-invalid={!!detailErrors.start}
                     />
                     {detailErrors.start ? (
@@ -209,7 +209,7 @@ export function NewGoalSheet({ open, onOpenChange, onCreated }: NewGoalSheetProp
           ) : null}
 
           {step === 3 ? (
-            <section className="mt-4 space-y-4">
+            <section className="mt-4 animate-rise space-y-4">
               <p className="font-body text-sm text-mist/70">Add up to 8 milestones. Watch the trail take shape.</p>
               <MilestoneBuilder
                 kind={kind}

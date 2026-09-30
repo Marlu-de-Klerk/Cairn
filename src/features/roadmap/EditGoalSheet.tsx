@@ -16,15 +16,15 @@ interface EditGoalSheetProps {
   onOpenChange: (open: boolean) => void
 }
 
-const INPUT_CLASS = 'mt-1 w-full rounded-md border border-stone-light bg-ink px-3 py-2 font-body text-sm text-mist'
+const INPUT_CLASS = 'mt-1 w-full rounded-xl border border-stone-light bg-ink px-3 py-2 font-body text-sm text-mist'
 
 /** Edit a goal's title, description, target and not-yet-done milestones, or delete it (undoable). */
 export function EditGoalSheet({ goal, milestones, open, onOpenChange }: EditGoalSheetProps) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-ink/60 backdrop-blur-sm" />
-        <Dialog.Content className="fixed inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-stone-light bg-stone p-6 text-mist sm:inset-x-auto sm:bottom-6 sm:right-6 sm:top-6 sm:w-[420px] sm:rounded-2xl sm:border">
+        <Dialog.Overlay className="fixed inset-0 animate-fade bg-ink/60 backdrop-blur-sm" />
+        <Dialog.Content className="fixed inset-x-0 bottom-0 max-h-[85vh] animate-rise overflow-y-auto rounded-t-3xl border-t border-stone-light bg-stone p-6 text-mist sm:inset-x-auto sm:bottom-6 sm:right-6 sm:top-6 sm:w-[420px] sm:rounded-3xl sm:border">
           {/* mounted only while open, so every opening starts from the goal as it is now */}
           {open ? <EditGoalForm goal={goal} milestones={milestones} onDone={() => onOpenChange(false)} /> : null}
         </Dialog.Content>
@@ -98,7 +98,7 @@ function EditGoalForm({ goal, milestones, onDone }: { goal: Goal; milestones: Mi
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">
         <Dialog.Title className="font-display text-xl">Edit goal</Dialog.Title>
-        <Dialog.Close className="rounded px-1 font-body text-xl leading-none text-mist/60 hover:text-mist" aria-label="Close">
+        <Dialog.Close className="rounded-full px-1 font-body text-xl leading-none text-mist/60 hover:text-mist" aria-label="Close">
           ×
         </Dialog.Close>
       </div>
@@ -143,12 +143,12 @@ function EditGoalForm({ goal, milestones, onDone }: { goal: Goal; milestones: Mi
       {error ? <p className="font-body text-sm text-accent-error">{error}</p> : null}
 
       <div className="flex justify-end gap-2">
-        <Dialog.Close className="rounded-md border border-stone-light px-4 py-2 font-body text-sm text-mist">Cancel</Dialog.Close>
+        <Dialog.Close className="rounded-full border border-stone-light px-4 py-2 font-body text-sm text-mist">Cancel</Dialog.Close>
         <button
           type="button"
           onClick={save}
           disabled={!valid || updateGoal.isPending}
-          className="rounded-md bg-lantern px-4 py-2 font-body text-sm font-medium text-ink disabled:opacity-40"
+          className="rounded-full bg-lantern px-4 py-2 font-body text-sm font-medium text-ink disabled:opacity-40"
         >
           {updateGoal.isPending ? 'Saving…' : 'Save changes'}
         </button>
@@ -156,17 +156,17 @@ function EditGoalForm({ goal, milestones, onDone }: { goal: Goal; milestones: Mi
 
       <div className="border-t border-stone-light pt-4">
         {confirmingDelete ? (
-          <div className="space-y-2 rounded-md border border-accent-error/60 p-3">
+          <div className="space-y-2 rounded-2xl border border-accent-error/60 p-3">
             <p className="font-body text-sm">Delete “{goal.title}”? Its island leaves your archipelago. You can undo this for a few seconds.</p>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setConfirmingDelete(false)} className="rounded-md border border-stone-light px-3 py-1.5 font-body text-sm text-mist">
+              <button type="button" onClick={() => setConfirmingDelete(false)} className="rounded-full border border-stone-light px-3 py-1.5 font-body text-sm text-mist">
                 Keep it
               </button>
               <button
                 type="button"
                 onClick={remove}
                 disabled={archiveGoal.isPending}
-                className="rounded-md bg-accent-error px-3 py-1.5 font-body text-sm font-medium text-mist disabled:opacity-50"
+                className="rounded-full bg-accent-error px-3 py-1.5 font-body text-sm font-medium text-mist disabled:opacity-50"
               >
                 Delete goal
               </button>

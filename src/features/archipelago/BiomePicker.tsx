@@ -50,7 +50,7 @@ export function BiomePicker({ value, onChange }: BiomePickerProps) {
               <directionalLight position={[-4, 16, 11]} intensity={1.15} />
               <RotatingIsland biome={key} />
             </View>
-            <span className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 rounded bg-ink/70 px-2 py-0.5 font-body text-xs text-mist">
+            <span className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 rounded-xl bg-ink/70 px-2 py-0.5 font-body text-xs text-mist">
               {label}
             </span>
           </button>

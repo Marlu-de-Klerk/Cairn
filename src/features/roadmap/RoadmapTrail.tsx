@@ -110,7 +110,7 @@ export function TrailView({ goal, layout, milestones, entries }: TrailViewProps)
             />
             {openMilestoneId === milestone.id ? (
               <Html position={[p.x, y + 0.35, p.z]} center distanceFactor={8}>
-                <div className="w-40 rounded-md border border-stone-light bg-stone/90 p-2 text-xs font-body text-mist shadow-lg backdrop-blur-sm">
+                <div className="w-40 rounded-2xl border border-stone-light bg-stone/90 p-2 text-xs font-body text-mist shadow-lg backdrop-blur-sm">
                   <p className="font-display font-medium">{milestone.title}</p>
                   <p className="mt-1 text-mist/60">{isDone ? 'Done' : isNext ? 'Next up' : 'Not yet'}</p>
                 </div>
@@ -170,7 +170,7 @@ function EntryMarker({ entry, unit, target, flyFrom, open, onClick }: {
       </mesh>
       {open ? (
         <Html position={[0, 0.2, 0]} center distanceFactor={8}>
-          <div className="w-40 rounded-md border border-stone-light bg-stone/90 p-2 text-xs font-body text-mist shadow-lg backdrop-blur-sm">
+          <div className="w-40 rounded-2xl border border-stone-light bg-stone/90 p-2 text-xs font-body text-mist shadow-lg backdrop-blur-sm">
             <p className="font-display font-medium">{entry.title}</p>
             {entry.value !== null ? <p className="mt-1 text-mist/60">{entry.value}{unit ? ` ${unit}` : ''}</p> : null}
             {entry.note ? <p className="mt-1 text-mist/40">{entry.note}</p> : null}

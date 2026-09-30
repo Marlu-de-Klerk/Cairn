@@ -42,13 +42,37 @@ describe('SignInPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send me a sign-in link' }))
 
     await waitFor(() => {
-      expect(screen.getByText(/Check runner@example.com for a sign-in link/)).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Check your inbox' })).toBeInTheDocument()
+      expect(screen.getByText('runner@example.com')).toBeInTheDocument()
     })
 
     expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
       email: 'runner@example.com',
       options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     })
+  })
+
+  it('shows a plain-language message when sending fails', async () => {
+    vi.mocked(supabase.auth.signInWithOtp).mockResolvedValueOnce({
+      data: { user: null, session: null },
+      error: { message: 'email rate limit exceeded', status: 429, code: 'over_email_send_rate_limit' },
+    } as never)
+    render(<SignInPage />)
+
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'runner@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send me a sign-in link' }))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/wait a minute/i))
+  })
+
+  it('offers a different email after sending', async () => {
+    render(<SignInPage />)
+
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'runner@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send me a sign-in link' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Use a different email' }))
+
+    expect(screen.getByLabelText('Email')).toHaveValue('runner@example.com')
   })
 
   it('starts the Google OAuth flow', async () => {

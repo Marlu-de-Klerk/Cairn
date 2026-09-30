@@ -23,3 +23,24 @@ const MESSAGES: Record<SignInErrorCode, string> = {
 export function signInErrorMessage(code: string | null): string | null {
   return code && code in MESSAGES ? MESSAGES[code as SignInErrorCode] : null
 }
+
+/** The parts of a Supabase auth error the sign-in page looks at. */
+export interface SignInFailure {
+  readonly message: string
+  readonly status?: number
+  readonly code?: string
+}
+
+/** Plain words for a failed sign-in request, instead of the raw API message. */
+export function signInFailureMessage(error: SignInFailure): string {
+  const code = error.code ?? ''
+  if (error.status === 429 || code.includes('rate_limit')) return 'Too many sign-in emails just now. Wait a minute, then try again.'
+  if (code === 'email_address_invalid' || code === 'validation_failed' || /invalid.*email|email.*invalid/i.test(error.message)) {
+    return "That email address doesn't look right."
+  }
+  if (code === 'signup_disabled') return "New sign-ups are closed right now."
+  if (error.status === undefined || error.status === 0 || /fetch|network/i.test(error.message)) {
+    return "Couldn't reach Cairn. Check your connection and try again."
+  }
+  return "Couldn't send the link. Try again in a moment."
+}

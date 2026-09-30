@@ -1,6 +1,9 @@
 """Beauty render of a hand-built island with Cycles, for promo shots and READMEs (not used by the app).
 
-  python scripts/blender/render_beauty.py assets-raw/VolcanoIsland.raw.glb out.png [front|back] [samples]   (bpy)
+  python scripts/blender/render_beauty.py assets-raw/VolcanoIsland.raw.glb out.png [front|back] [samples] [transparent]   (bpy)
+
+`transparent` renders the island alone on a transparent background (no sky, sea or vignette), for artwork that sits
+on a page, like the sign-in illustration.
 
 Imports the raw Blender export (before gltf-transform), gives it vertex-colour materials (lit/soft are matte, unlit
 emits, with extra punch for hot colours like lava), lights it with the app's sun direction and a soft sky, and
@@ -18,6 +21,7 @@ IN = args[0]
 OUT = args[1] if len(args) > 1 else '/tmp/beauty.png'
 VIEW = args[2] if len(args) > 2 else 'front'
 SAMPLES = int(args[3]) if len(args) > 3 else 64
+TRANSPARENT = len(args) > 4 and args[4] == 'transparent'
 
 
 def srgb(h):
@@ -88,6 +92,9 @@ def build_scene():
     b.inputs['Base Color'].default_value = srgb('#5FB8C2')
     b.inputs['Roughness'].default_value = 0.25
     sea.data.materials.append(m)
+    if TRANSPARENT:
+        # a cut-out: no sea at all (a shadow catcher's shadow reads as a smudge on a dark page)
+        sea.hide_render = True
 
 
 def light_and_camera():
@@ -173,7 +180,13 @@ def compositor():
     links.new(cb.outputs['Image'], vig.inputs[1])
     links.new(blur.outputs['Image'], vig.inputs[2])
     comp = nodes.new('CompositorNodeComposite')
-    links.new(vig.outputs['Image'], comp.inputs['Image'])
+    if TRANSPARENT:
+        # no vignette on a cut-out, and the render's own alpha carried through
+        links.new(cb.outputs['Image'], comp.inputs['Image'])
+        if 'Alpha' in comp.inputs:
+            links.new(rl.outputs['Alpha'], comp.inputs['Alpha'])
+    else:
+        links.new(vig.outputs['Image'], comp.inputs['Image'])
 
 
 def render():
@@ -187,6 +200,9 @@ def render():
     scene.render.resolution_x = 1600
     scene.render.resolution_y = 1000
     scene.render.image_settings.file_format = 'PNG'
+    if TRANSPARENT:
+        scene.render.film_transparent = True
+        scene.render.image_settings.color_mode = 'RGBA'
     scene.render.filepath = OUT
     bpy.ops.render.render(write_still=True)
     print('rendered', OUT)

@@ -18,7 +18,7 @@ function ToastItem({ toast }: { toast: Toast }) {
   const [running, setRunning] = useState(false)
   const [failed, setFailed] = useState(false)
   return (
-    <div className="pointer-events-auto flex max-w-sm items-center gap-3 rounded-md border border-stone-light bg-stone/95 px-4 py-2 text-sm text-mist shadow-lg backdrop-blur-sm">
+    <div className="pointer-events-auto flex max-w-sm animate-pop items-center gap-3 rounded-full border border-stone-light bg-stone/95 px-4 py-2 text-sm text-mist shadow-lg backdrop-blur-sm">
       <span>{failed ? "Couldn't undo. Try again." : toast.message}</span>
       {toast.action ? (
         <button

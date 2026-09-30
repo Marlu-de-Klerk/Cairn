@@ -39,3 +39,11 @@ isn't legally required (spec §8). One row per source file.
 | `public/models/HighlandsIsland.glb` | Authored in this repo: built by `scripts/blender/highlands_island.py` + `island_core.py` (Blender 4.5) from the seed-15 highlands layout (`npm run island:export -- highlands`), packed by `npm run island:pack -- highlands` | n/a (generated) | CC0 (own work) | 2026-09-29 hand-built highlands island (loch, burn and stone bridge, ruined castle, Scots pines, heather, drystone walls, sheep, bothy); replaces the Kenney highlands landmass and props. Rebuild: export, run the script with Blender, pack |
 | `public/models/VolcanoIsland.glb` | Authored in this repo: built by `scripts/blender/volcano_island.py` + `island_core.py` (Blender 4.5) from the seed-39 volcano layout (`npm run island:export -- volcano`), packed by `npm run island:pack -- volcano` | n/a (generated) | CC0 (own work) | 2026-09-29 hand-built volcano island (basalt cone, smoking crater, lava falls and cracks, steam vents, ash trees, basalt columns, black-sand beach); replaces the Kenney volcano landmass and props. Rebuild: export, run the script with Blender, pack |
 | `public/textures/water-normals.webp` | Authored in this repo: baked by `scripts/blender/water_normals.py` from Blender's FFT Ocean modifier (seamless over one period), 512 px, WebP q90 | n/a (generated) | CC0 (own work) | 2026-09-30 sea normal map for `Water.tsx`. The CC0 texture hosts (ambientCG, Poly Haven) were unreachable from the build environment, so it was generated instead. Rebuild: run the script with Blender's Python (needs Pillow for WebP) |
+| `public/images/signin-island.webp` | Authored in this repo: Cycles render of `assets-raw/JungleIsland.raw.glb` by `scripts/blender/render_beauty.py ... front 48 transparent` (sea as a shadow catcher), trimmed and resized to 560 px, WebP q86 | n/a (generated) | CC0 (own work) | 2026-09-30 sign-in page illustration |
+
+## Fonts
+
+| Package | Family | URL | Licence | Notes |
+|---|---|---|---|---|
+| `@fontsource-variable/fredoka` | Fredoka (variable) | https://fonts.google.com/specimen/Fredoka | SIL OFL 1.1 | 2026-09-30 display face (wordmark, titles); replaces Fraunces |
+| `@fontsource-variable/nunito` | Nunito (variable) | https://fonts.google.com/specimen/Nunito | SIL OFL 1.1 | 2026-09-30 body face; replaces Inter |
