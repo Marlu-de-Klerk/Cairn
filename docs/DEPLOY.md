@@ -40,6 +40,9 @@ addresses on its list. In the Supabase dashboard, **Authentication → URL Confi
 
 - Every path that isn't a real file (`/g/<id>`, `/sign-in`, `/auth/callback`) serves `index.html`, so deep links and
   refreshes work.
+- Belt and braces: the build also writes `dist/404.html` (a copy of `index.html`), which static hosts serve for unknown
+  paths. Refreshes work even on a site created without these rules, like a Render static site made from the dashboard
+  or API rather than as a Blueprint.
 - Hashed build assets are cached for a year. Island models are cached for a day.
 - Node 22 (`engines` in `package.json`, `.node-version`).
 
