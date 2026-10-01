@@ -48,7 +48,7 @@ describe('SignInPage', () => {
 
     expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
       email: 'runner@example.com',
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: { emailRedirectTo: `${window.location.origin}/` },
     })
   })
 
@@ -83,7 +83,7 @@ describe('SignInPage', () => {
     await waitFor(() => {
       expect(supabase.auth.signInWithOAuth).toHaveBeenCalledWith({
         provider: 'google',
-        options: { redirectTo: `${window.location.origin}/auth/callback` },
+        options: { redirectTo: `${window.location.origin}/` },
       })
     })
   })

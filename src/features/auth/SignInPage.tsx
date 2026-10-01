@@ -4,11 +4,20 @@ import { signInErrorMessage, signInFailureMessage } from '../../lib/authCallback
 
 type Status = 'idle' | 'sending' | 'sent' | 'error'
 
+/**
+ * Where a sign-in link (or Google) returns: the site's root, which every static host serves without a rewrite rule.
+ * A deeper path like /auth/callback only loads the app where the host rewrites unknown paths to index.html; without
+ * that rule it's a 404 and the sign-in is lost. supabase-js reads the session (or the error) from the URL on whatever
+ * page the app starts on, and RequireAuth passes an error on to this page. The /auth/callback route stays for links
+ * already sent.
+ */
+const AUTH_RETURN_URL = () => `${window.location.origin}/`
+
 export function SignInPage() {
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState<Status>('idle')
   const [resent, setResent] = useState(false)
-  // A failed magic link or OAuth sign-in comes back from /auth/callback as ?error=<code>.
+  // A failed magic link or OAuth sign-in comes back here as ?error=<code> (see RequireAuth and AuthCallbackPage).
   const [errorMessage, setErrorMessage] = useState(
     () => signInErrorMessage(new URLSearchParams(window.location.search).get('error')) ?? '',
   )
@@ -17,7 +26,7 @@ export function SignInPage() {
     setErrorMessage('')
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: { emailRedirectTo: AUTH_RETURN_URL() },
     })
     if (error) {
       setErrorMessage(signInFailureMessage(error))
@@ -44,7 +53,7 @@ export function SignInPage() {
     setErrorMessage('')
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: AUTH_RETURN_URL() },
     })
 
     if (error) {
